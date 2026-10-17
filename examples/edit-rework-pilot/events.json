@@ -1,0 +1,2365 @@
+[
+ {
+  "type": "status",
+  "sender": null,
+  "role": "planner",
+  "name": null,
+  "path": null,
+  "ok": null,
+  "status": "working"
+ },
+ {
+  "type": "status",
+  "sender": null,
+  "role": "planner",
+  "name": null,
+  "path": null,
+  "ok": null,
+  "status": "idle"
+ },
+ {
+  "type": "status",
+  "sender": null,
+  "role": "pm",
+  "name": null,
+  "path": null,
+  "ok": null,
+  "status": "working"
+ },
+ {
+  "type": "task",
+  "sender": null,
+  "role": null,
+  "name": null,
+  "path": null,
+  "ok": null,
+  "status": null,
+  "task": "MVP 需求文档（PRD）",
+  "task_status": "running"
+ },
+ {
+  "type": "tool",
+  "sender": "pm",
+  "role": null,
+  "name": "list_files",
+  "path": "",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "pm",
+  "role": null,
+  "name": "write_file",
+  "path": "docs/PRD.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "status",
+  "sender": null,
+  "role": "pm",
+  "name": null,
+  "path": null,
+  "ok": null,
+  "status": "idle"
+ },
+ {
+  "type": "status",
+  "sender": null,
+  "role": "engineer",
+  "name": null,
+  "path": null,
+  "ok": null,
+  "status": "working"
+ },
+ {
+  "type": "task",
+  "sender": null,
+  "role": null,
+  "name": null,
+  "path": null,
+  "ok": null,
+  "status": null,
+  "task": "MVP 需求文档（PRD）",
+  "task_status": "reviewing"
+ },
+ {
+  "type": "tool",
+  "sender": "engineer",
+  "role": null,
+  "name": "list_files",
+  "path": "",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "engineer",
+  "role": null,
+  "name": "read_file",
+  "path": "docs/PRD.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "engineer",
+  "role": null,
+  "name": "submit_review",
+  "path": null,
+  "ok": false,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "engineer",
+  "role": null,
+  "name": "submit_review",
+  "path": null,
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "status",
+  "sender": null,
+  "role": "engineer",
+  "name": null,
+  "path": null,
+  "ok": null,
+  "status": "idle"
+ },
+ {
+  "type": "status",
+  "sender": null,
+  "role": "pm",
+  "name": null,
+  "path": null,
+  "ok": null,
+  "status": "working"
+ },
+ {
+  "type": "task",
+  "sender": null,
+  "role": null,
+  "name": null,
+  "path": null,
+  "ok": null,
+  "status": null,
+  "task": "MVP 需求文档（PRD）",
+  "task_status": "running"
+ },
+ {
+  "type": "tool",
+  "sender": "pm",
+  "role": null,
+  "name": "list_files",
+  "path": "",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "pm",
+  "role": null,
+  "name": "read_file",
+  "path": "docs/PRD.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "pm",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/PRD.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "pm",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/PRD.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "pm",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/PRD.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "pm",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/PRD.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "pm",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/PRD.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "pm",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/PRD.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "pm",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/PRD.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "pm",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/PRD.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "pm",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/PRD.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "pm",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/PRD.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "pm",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/PRD.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "pm",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/PRD.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "pm",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/PRD.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "pm",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/PRD.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "pm",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/PRD.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "pm",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/PRD.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "pm",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/PRD.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "pm",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/PRD.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "pm",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/PRD.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "pm",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/PRD.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "pm",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/PRD.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "pm",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/PRD.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "pm",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/PRD.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "pm",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/PRD.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "pm",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/PRD.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "pm",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/PRD.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "pm",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/PRD.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "pm",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/PRD.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "pm",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/PRD.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "pm",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/PRD.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "pm",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/PRD.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "pm",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/PRD.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "pm",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/PRD.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "pm",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/PRD.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "pm",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/PRD.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "pm",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/PRD.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "pm",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/PRD.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "status",
+  "sender": null,
+  "role": "pm",
+  "name": null,
+  "path": null,
+  "ok": null,
+  "status": "idle"
+ },
+ {
+  "type": "status",
+  "sender": null,
+  "role": "engineer",
+  "name": null,
+  "path": null,
+  "ok": null,
+  "status": "working"
+ },
+ {
+  "type": "task",
+  "sender": null,
+  "role": null,
+  "name": null,
+  "path": null,
+  "ok": null,
+  "status": null,
+  "task": "MVP 需求文档（PRD）",
+  "task_status": "reviewing"
+ },
+ {
+  "type": "tool",
+  "sender": "engineer",
+  "role": null,
+  "name": "list_files",
+  "path": "",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "engineer",
+  "role": null,
+  "name": "read_file",
+  "path": "docs/PRD.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "engineer",
+  "role": null,
+  "name": "submit_review",
+  "path": null,
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "status",
+  "sender": null,
+  "role": "engineer",
+  "name": null,
+  "path": null,
+  "ok": null,
+  "status": "idle"
+ },
+ {
+  "type": "escalation",
+  "next": [
+   "escalate"
+  ]
+ },
+ {
+  "type": "status",
+  "sender": null,
+  "role": "designer",
+  "name": null,
+  "path": null,
+  "ok": null,
+  "status": "working"
+ },
+ {
+  "type": "task",
+  "sender": null,
+  "role": null,
+  "name": null,
+  "path": null,
+  "ok": null,
+  "status": null,
+  "task": "交互设计与视觉风格",
+  "task_status": "running"
+ },
+ {
+  "type": "status",
+  "sender": null,
+  "role": "engineer",
+  "name": null,
+  "path": null,
+  "ok": null,
+  "status": "working"
+ },
+ {
+  "type": "task",
+  "sender": null,
+  "role": null,
+  "name": null,
+  "path": null,
+  "ok": null,
+  "status": null,
+  "task": "技术方案设计",
+  "task_status": "running"
+ },
+ {
+  "type": "tool",
+  "sender": "engineer",
+  "role": null,
+  "name": "list_files",
+  "path": "",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "engineer",
+  "role": null,
+  "name": "read_file",
+  "path": "docs/PRD.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "designer",
+  "role": null,
+  "name": "list_files",
+  "path": "",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "designer",
+  "role": null,
+  "name": "read_file",
+  "path": "docs/PRD.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "designer",
+  "role": null,
+  "name": "list_files",
+  "path": "",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "designer",
+  "role": null,
+  "name": "write_file",
+  "path": "docs/design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "status",
+  "sender": null,
+  "role": "designer",
+  "name": null,
+  "path": null,
+  "ok": null,
+  "status": "idle"
+ },
+ {
+  "type": "tool",
+  "sender": "engineer",
+  "role": null,
+  "name": "write_file",
+  "path": "docs/tech-design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "engineer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/tech-design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "engineer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/tech-design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "engineer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/tech-design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "status",
+  "sender": null,
+  "role": "engineer",
+  "name": null,
+  "path": null,
+  "ok": null,
+  "status": "idle"
+ },
+ {
+  "type": "status",
+  "sender": null,
+  "role": "pm",
+  "name": null,
+  "path": null,
+  "ok": null,
+  "status": "working"
+ },
+ {
+  "type": "task",
+  "sender": null,
+  "role": null,
+  "name": null,
+  "path": null,
+  "ok": null,
+  "status": null,
+  "task": "交互设计与视觉风格",
+  "task_status": "reviewing"
+ },
+ {
+  "type": "status",
+  "sender": null,
+  "role": "qa",
+  "name": null,
+  "path": null,
+  "ok": null,
+  "status": "working"
+ },
+ {
+  "type": "task",
+  "sender": null,
+  "role": null,
+  "name": null,
+  "path": null,
+  "ok": null,
+  "status": null,
+  "task": "技术方案设计",
+  "task_status": "reviewing"
+ },
+ {
+  "type": "tool",
+  "sender": "pm",
+  "role": null,
+  "name": "list_files",
+  "path": "",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "pm",
+  "role": null,
+  "name": "read_file",
+  "path": "docs/PRD.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "pm",
+  "role": null,
+  "name": "read_file",
+  "path": "docs/design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "pm",
+  "role": null,
+  "name": "read_file",
+  "path": "docs/tech-design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "qa",
+  "role": null,
+  "name": "list_files",
+  "path": "",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "qa",
+  "role": null,
+  "name": "read_file",
+  "path": "docs/PRD.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "qa",
+  "role": null,
+  "name": "read_file",
+  "path": "docs/tech-design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "qa",
+  "role": null,
+  "name": "read_file",
+  "path": "docs/design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "pm",
+  "role": null,
+  "name": "read_file",
+  "path": "docs/design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "qa",
+  "role": null,
+  "name": "write_file",
+  "path": "docs/review-tech-design-r1.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "pm",
+  "role": null,
+  "name": "submit_review",
+  "path": null,
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "qa",
+  "role": null,
+  "name": "submit_review",
+  "path": null,
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "status",
+  "sender": null,
+  "role": "pm",
+  "name": null,
+  "path": null,
+  "ok": null,
+  "status": "idle"
+ },
+ {
+  "type": "status",
+  "sender": null,
+  "role": "qa",
+  "name": null,
+  "path": null,
+  "ok": null,
+  "status": "idle"
+ },
+ {
+  "type": "status",
+  "sender": null,
+  "role": "designer",
+  "name": null,
+  "path": null,
+  "ok": null,
+  "status": "working"
+ },
+ {
+  "type": "task",
+  "sender": null,
+  "role": null,
+  "name": null,
+  "path": null,
+  "ok": null,
+  "status": null,
+  "task": "交互设计与视觉风格",
+  "task_status": "running"
+ },
+ {
+  "type": "status",
+  "sender": null,
+  "role": "engineer",
+  "name": null,
+  "path": null,
+  "ok": null,
+  "status": "working"
+ },
+ {
+  "type": "task",
+  "sender": null,
+  "role": null,
+  "name": null,
+  "path": null,
+  "ok": null,
+  "status": null,
+  "task": "技术方案设计",
+  "task_status": "running"
+ },
+ {
+  "type": "tool",
+  "sender": "designer",
+  "role": null,
+  "name": "read_file",
+  "path": "docs/design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "designer",
+  "role": null,
+  "name": "list_files",
+  "path": "",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "engineer",
+  "role": null,
+  "name": "read_file",
+  "path": "docs/tech-design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "engineer",
+  "role": null,
+  "name": "list_files",
+  "path": "",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "designer",
+  "role": null,
+  "name": "read_file",
+  "path": "docs/PRD.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "engineer",
+  "role": null,
+  "name": "read_file",
+  "path": "docs/review-tech-design-r1.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "designer",
+  "role": null,
+  "name": "read_file",
+  "path": "docs/tech-design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "engineer",
+  "role": null,
+  "name": "read_file",
+  "path": "docs/design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "engineer",
+  "role": null,
+  "name": "read_file",
+  "path": "docs/PRD.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "engineer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/tech-design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "engineer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/tech-design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "engineer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/tech-design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "engineer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/tech-design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "engineer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/tech-design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "engineer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/tech-design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "engineer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/tech-design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "engineer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/tech-design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "engineer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/tech-design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "engineer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/tech-design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "engineer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/tech-design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "engineer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/tech-design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "engineer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/tech-design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "engineer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/tech-design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "engineer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/tech-design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "engineer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/tech-design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "engineer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/tech-design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "engineer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/tech-design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "engineer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/tech-design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "engineer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/tech-design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "engineer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/tech-design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "engineer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/tech-design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "engineer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/tech-design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "engineer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/tech-design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "engineer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/tech-design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "engineer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/tech-design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "designer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "designer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "designer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "designer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "engineer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/tech-design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "engineer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/tech-design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "engineer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/tech-design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "status",
+  "sender": null,
+  "role": "engineer",
+  "name": null,
+  "path": null,
+  "ok": null,
+  "status": "idle"
+ },
+ {
+  "type": "tool",
+  "sender": "designer",
+  "role": null,
+  "name": "read_file",
+  "path": "docs/design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "designer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "designer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "designer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "designer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "designer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "designer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "designer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "designer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "designer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "designer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "designer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "designer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "designer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "designer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "designer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "designer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "designer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "designer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "designer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "designer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "designer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "designer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "designer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "designer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "designer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "designer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "designer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "designer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "designer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "designer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "designer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "designer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "designer",
+  "role": null,
+  "name": "read_file",
+  "path": "docs/design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "designer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "designer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "designer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "designer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "designer",
+  "role": null,
+  "name": "read_file",
+  "path": "docs/design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "designer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "designer",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "status",
+  "sender": null,
+  "role": "designer",
+  "name": null,
+  "path": null,
+  "ok": null,
+  "status": "idle"
+ },
+ {
+  "type": "status",
+  "sender": null,
+  "role": "pm",
+  "name": null,
+  "path": null,
+  "ok": null,
+  "status": "working"
+ },
+ {
+  "type": "task",
+  "sender": null,
+  "role": null,
+  "name": null,
+  "path": null,
+  "ok": null,
+  "status": null,
+  "task": "交互设计与视觉风格",
+  "task_status": "reviewing"
+ },
+ {
+  "type": "status",
+  "sender": null,
+  "role": "qa",
+  "name": null,
+  "path": null,
+  "ok": null,
+  "status": "working"
+ },
+ {
+  "type": "task",
+  "sender": null,
+  "role": null,
+  "name": null,
+  "path": null,
+  "ok": null,
+  "status": null,
+  "task": "技术方案设计",
+  "task_status": "reviewing"
+ },
+ {
+  "type": "tool",
+  "sender": "pm",
+  "role": null,
+  "name": "list_files",
+  "path": "",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "qa",
+  "role": null,
+  "name": "list_files",
+  "path": "",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "pm",
+  "role": null,
+  "name": "read_file",
+  "path": "docs/design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "qa",
+  "role": null,
+  "name": "read_file",
+  "path": "docs/tech-design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "pm",
+  "role": null,
+  "name": "read_file",
+  "path": "docs/PRD.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "qa",
+  "role": null,
+  "name": "read_file",
+  "path": "docs/review-tech-design-r1.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "pm",
+  "role": null,
+  "name": "read_file",
+  "path": "docs/tech-design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "qa",
+  "role": null,
+  "name": "read_file",
+  "path": "docs/PRD.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "qa",
+  "role": null,
+  "name": "read_file",
+  "path": "docs/design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "pm",
+  "role": null,
+  "name": "submit_review",
+  "path": null,
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "status",
+  "sender": null,
+  "role": "pm",
+  "name": null,
+  "path": null,
+  "ok": null,
+  "status": "idle"
+ },
+ {
+  "type": "tool",
+  "sender": "qa",
+  "role": null,
+  "name": "read_file",
+  "path": "docs/tech-design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "qa",
+  "role": null,
+  "name": "write_file",
+  "path": "docs/review-tech-design-r2.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "qa",
+  "role": null,
+  "name": "submit_review",
+  "path": null,
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "status",
+  "sender": null,
+  "role": "qa",
+  "name": null,
+  "path": null,
+  "ok": null,
+  "status": "idle"
+ },
+ {
+  "type": "escalation",
+  "next": [
+   "escalate"
+  ]
+ },
+ {
+  "type": "status",
+  "sender": null,
+  "role": "qa",
+  "name": null,
+  "path": null,
+  "ok": null,
+  "status": "working"
+ },
+ {
+  "type": "task",
+  "sender": null,
+  "role": null,
+  "name": null,
+  "path": null,
+  "ok": null,
+  "status": null,
+  "task": "测试计划与用例",
+  "task_status": "running"
+ },
+ {
+  "type": "tool",
+  "sender": "qa",
+  "role": null,
+  "name": "list_files",
+  "path": "",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "qa",
+  "role": null,
+  "name": "read_file",
+  "path": "docs/PRD.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "qa",
+  "role": null,
+  "name": "read_file",
+  "path": "docs/tech-design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "qa",
+  "role": null,
+  "name": "read_file",
+  "path": "docs/design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "qa",
+  "role": null,
+  "name": "read_file",
+  "path": "docs/review-tech-design-r1.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "qa",
+  "role": null,
+  "name": "read_file",
+  "path": "docs/review-tech-design-r2.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "qa",
+  "role": null,
+  "name": "write_file",
+  "path": "docs/test-plan.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "qa",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/test-plan.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "status",
+  "sender": null,
+  "role": "qa",
+  "name": null,
+  "path": null,
+  "ok": null,
+  "status": "idle"
+ },
+ {
+  "type": "status",
+  "sender": null,
+  "role": "engineer",
+  "name": null,
+  "path": null,
+  "ok": null,
+  "status": "working"
+ },
+ {
+  "type": "task",
+  "sender": null,
+  "role": null,
+  "name": null,
+  "path": null,
+  "ok": null,
+  "status": null,
+  "task": "测试计划与用例",
+  "task_status": "reviewing"
+ },
+ {
+  "type": "tool",
+  "sender": "engineer",
+  "role": null,
+  "name": "list_files",
+  "path": "",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "engineer",
+  "role": null,
+  "name": "read_file",
+  "path": "docs/test-plan.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "engineer",
+  "role": null,
+  "name": "read_file",
+  "path": "docs/PRD.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "engineer",
+  "role": null,
+  "name": "read_file",
+  "path": "docs/tech-design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "engineer",
+  "role": null,
+  "name": "read_file",
+  "path": "docs/design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "engineer",
+  "role": null,
+  "name": "read_file",
+  "path": "docs/review-tech-design-r2.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "engineer",
+  "role": null,
+  "name": "read_file",
+  "path": "docs/review-tech-design-r1.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "engineer",
+  "role": null,
+  "name": "submit_review",
+  "path": null,
+  "ok": false,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "engineer",
+  "role": null,
+  "name": "submit_review",
+  "path": null,
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "status",
+  "sender": null,
+  "role": "engineer",
+  "name": null,
+  "path": null,
+  "ok": null,
+  "status": "idle"
+ },
+ {
+  "type": "status",
+  "sender": null,
+  "role": "qa",
+  "name": null,
+  "path": null,
+  "ok": null,
+  "status": "working"
+ },
+ {
+  "type": "task",
+  "sender": null,
+  "role": null,
+  "name": null,
+  "path": null,
+  "ok": null,
+  "status": null,
+  "task": "测试计划与用例",
+  "task_status": "running"
+ },
+ {
+  "type": "tool",
+  "sender": "qa",
+  "role": null,
+  "name": "list_files",
+  "path": "",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "qa",
+  "role": null,
+  "name": "read_file",
+  "path": "docs/test-plan.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "qa",
+  "role": null,
+  "name": "read_file",
+  "path": "docs/tech-design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "qa",
+  "role": null,
+  "name": "read_file",
+  "path": "docs/PRD.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "qa",
+  "role": null,
+  "name": "read_file",
+  "path": "docs/design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "qa",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/test-plan.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "qa",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/test-plan.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "qa",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/test-plan.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "qa",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/test-plan.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "qa",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/test-plan.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "qa",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/test-plan.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "qa",
+  "role": null,
+  "name": "edit_file",
+  "path": "docs/test-plan.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "status",
+  "sender": null,
+  "role": "qa",
+  "name": null,
+  "path": null,
+  "ok": null,
+  "status": "idle"
+ },
+ {
+  "type": "status",
+  "sender": null,
+  "role": "engineer",
+  "name": null,
+  "path": null,
+  "ok": null,
+  "status": "working"
+ },
+ {
+  "type": "task",
+  "sender": null,
+  "role": null,
+  "name": null,
+  "path": null,
+  "ok": null,
+  "status": null,
+  "task": "测试计划与用例",
+  "task_status": "reviewing"
+ },
+ {
+  "type": "tool",
+  "sender": "engineer",
+  "role": null,
+  "name": "list_files",
+  "path": "",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "engineer",
+  "role": null,
+  "name": "read_file",
+  "path": "docs/test-plan.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "engineer",
+  "role": null,
+  "name": "read_file",
+  "path": "docs/tech-design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "engineer",
+  "role": null,
+  "name": "read_file",
+  "path": "docs/PRD.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "engineer",
+  "role": null,
+  "name": "read_file",
+  "path": "docs/design.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "engineer",
+  "role": null,
+  "name": "read_file",
+  "path": "docs/test-plan.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "engineer",
+  "role": null,
+  "name": "read_file",
+  "path": "docs/test-plan.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "engineer",
+  "role": null,
+  "name": "read_file",
+  "path": "docs/test-plan.md",
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "engineer",
+  "role": null,
+  "name": "submit_review",
+  "path": null,
+  "ok": false,
+  "status": null
+ },
+ {
+  "type": "tool",
+  "sender": "engineer",
+  "role": null,
+  "name": "submit_review",
+  "path": null,
+  "ok": true,
+  "status": null
+ },
+ {
+  "type": "status",
+  "sender": null,
+  "role": "engineer",
+  "name": null,
+  "path": null,
+  "ok": null,
+  "status": "idle"
+ },
+ {
+  "type": "escalation",
+  "next": [
+   "escalate"
+  ]
+ },
+ {
+  "type": "status",
+  "sender": null,
+  "role": "reporter",
+  "name": null,
+  "path": null,
+  "ok": null,
+  "status": "working"
+ },
+ {
+  "type": "status",
+  "sender": null,
+  "role": "reporter",
+  "name": null,
+  "path": null,
+  "ok": null,
+  "status": "idle"
+ }
+]

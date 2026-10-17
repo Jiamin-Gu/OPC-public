@@ -1,0 +1,3 @@
+# Windows 批处理必须用 CRLF 换行，shell 脚本必须用 LF
+*.bat text eol=crlf
+*.sh text eol=lf

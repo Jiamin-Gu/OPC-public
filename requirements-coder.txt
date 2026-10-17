@@ -1,0 +1,3 @@
+# 可选：工程师角色用来写代码、运行和测试的编码 agent（需要安装 Git）
+# 没有安装时，工程师退回到只写代码、不运行的模式
+coder-agent @ git+https://github.com/Jiamin-Gu/Coding-agent-public.git

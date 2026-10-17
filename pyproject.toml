@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "opc"
+dynamic = ["version"]
+description = "一人公司：基于 LangGraph 的多角色 agent 协作平台，你当 CEO，AI 团队干活"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+dependencies = [
+    "langgraph>=1.2",
+    "langgraph-checkpoint-sqlite>=3.0",
+    "openai>=1.40",
+    "python-dotenv>=1.0",
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+    "websockets>=12.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "httpx>=0.27"]
+coder = ["coder-agent @ git+https://github.com/Jiamin-Gu/Coding-agent-public.git"]
+
+[project.scripts]
+opc = "opc.web.__main__:main"
+
+[tool.setuptools.dynamic]
+version = { attr = "opc.__version__" }
+
+[tool.setuptools.packages.find]
+include = ["opc*"]
+
+[tool.setuptools.package-data]
+"opc.web" = ["static/*"]
+"opc" = ["role_prompts/*.md", "task_templates/*.md", "task_templates/library/*.md",
+         "role_library/*.md", "role_library/index.json", "role_library/*/*.md"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["tests"]

@@ -1,0 +1,189 @@
+{
+ "level": "concise",
+ "name": "gym_edit_pilot",
+ "task": "gym",
+ "review_all": true,
+ "seconds": 3534,
+ "usage": {
+  "planner": {
+   "prompt": 16003,
+   "completion": 3647,
+   "cached": 0,
+   "calls": 2
+  },
+  "pm": {
+   "prompt": 1139057,
+   "completion": 123073,
+   "cached": 0,
+   "calls": 27
+  },
+  "engineer": {
+   "prompt": 3122645,
+   "completion": 177641,
+   "cached": 0,
+   "calls": 48
+  },
+  "designer": {
+   "prompt": 1306780,
+   "completion": 83417,
+   "cached": 0,
+   "calls": 16
+  },
+  "qa": {
+   "prompt": 2396511,
+   "completion": 136155,
+   "cached": 0,
+   "calls": 34
+  }
+ },
+ "total": {
+  "prompt": 7980996,
+  "completion": 523933,
+  "cached": 0,
+  "calls": 127
+ },
+ "tasks": [
+  {
+   "title": "MVP 需求文档（PRD）",
+   "assignee": "pm",
+   "reviewer": "engineer",
+   "status": "done",
+   "rounds": 2,
+   "files": [
+    "docs/PRD.md"
+   ],
+   "reviews": [
+    {
+     "round": 1,
+     "verdict": "changes",
+     "issues": [
+      "docs/PRD.md §5.2 S8 末条 + S9 第 1 条 + §5.3 R5，与 §7.1 风险表第 3 行矛盾：S8/S9/R5 规定『场次结束后未做任何点名 → 该场次全部有效预约置为 no_show，并给会员 no_show_count_30d + 1』，§7.1 却写『未点名场次标记〔未点名异常〕给运营人工处理，不静默扣信用』。会怎么出错：教练漏点名（点名完成率目标只要求 ≥90%，即约 10% 场次会漏）时，一场 20 人的课会让 20 名会员各 +1 次爽约；其中已有 2 次爽约的会员当场被禁约 7 天——这正是 §7.1 列为高影响、§8.3 列为回滚条件的『全员误判』场景。期望：明确区分『教练标记 absent』与『整场未点名』两种情况——建议仅前者自动记 no_show，后者一律进入「未点名异常」待运营处理（不自动计数、不自动入黑名单），并同步改写 S9、R5 及 §2 的爽约率口径，补一条覆盖「整场未点名」会员可见状态的验收标准（依据：S8/S9 与 §7.1 必须给出唯一结论）。",
+      "docs/PRD.md §5.2 S7（及 §5.3 R3、§6.4）未定义『名额释放后是否锁定给被通知人』。会怎么出错：容量 20 已满，A 取消释放 1 个名额，B 被通知并进入 15 分钟倒计时；若名额不锁定，C（或 A 自己）看到课表显示「剩余 1」后直接预约成功，3 分钟后 B 点『确认参加』——按 R1 不许超卖，B 只能失败，但 PRD 没规定 B 失败时的处理（是否顺延下一位？是否消耗一次递补尝试？是否计入「连续 3 次」？）；若名额锁定，则 §10 没有任何字段（无 reserved_count、无 pending_confirm 状态）能表达「被占但未确认」的名额，课表剩余名额也会显示错。两种实现都说得通、结果完全不同，且 §2 的『递补确认率 ≥60%』在不锁定的实现下几乎不可能达成。期望：明确选择其一（建议释放时把该名额锁定给 notified 记录，课表剩余名额按 occupied_count + reserved_count 计算），在 §10 增加相应字段与状态，并在 S7 补写「确认时名额已被他人占用」的验收标准（依据：S7 只规定了与「立即预约」并发时先到先得，未规定 15 分钟窗口内的占用归属）。",
+      "docs/PRD.md §5.2 S4 第 5 条与 S5 第 2 条的文案，与 §5.3 R4、§6.5、以及 S5 自身的结论矛盾：S4 写『我要请假…附文案〔已过取消截止时间，请假将记录 1 次爽约〕』，S5 写二次确认弹窗文案『此操作将记录 1 次爽约，累计 3 次将暂停 7 天预约权限』，但 S5 结论、R4、§6.5 都规定请假只记 late_cancel、不记爽约，且 MVP 对晚取消不设任何惩罚。会怎么出错：会员在开课前 1 小时点请假，弹窗威胁将记 1 次爽约、累计 3 次停权限，而系统实际只记一次晚取消且永不处罚——设计师照 S4/S5 出稿、测试按弹窗写断言，文案与规则对不上，属于对用户虚假告知，被投诉时无法解释。期望：两处文案改为与 R4 一致（如『此操作将记录 1 次晚取消，不计爽约；名额立即释放』），删除『累计 3 次暂停权限』（该惩罚未启用）；若产品想预告未来的惩罚计划，需单独标注「尚未生效」（依据：R4、§6.5 明确只记录不惩罚）。",
+      "docs/PRD.md §10.2 waitlist_entry 的 notify_attempt_count（注释为『同一名额顺延计数，用于连续 3 次规则』）语义与 S7/R3 的规则无法对应：『连续 3 次递补均无人确认』是按一个被释放的名额计数的，而该字段挂在单个 waitlist_entry 上，一个 entry 只会被通知 1 次。会怎么出错：某名额依次通知 B、C、D，三条 waitlist_entry 的 notify_attempt_count 都是 1，定时任务读到未达 3 次，于是继续通知第 4、5 位——S7 的『连续 3 次失败即停止递补』完全失效，开课前反复通知，正是该规则要防的通知噪音，也让 §2 的『递补不空转』指标无法度量。期望：把计数器提到名额/场次粒度（例如 class_session 增加 waitlist_try_count，或新增一张名额释放事件记录表），明确计数何时归零（有人确认成功、名额被直接预约消耗、运营手动加容量等），并让 §9 埋点的 stage_index 口径与之一致（依据：S7 同一名额连续 3 次通知无确认则停止递补）。",
+      "docs/PRD.md §10.2 booking 约束『唯一索引 (session_id, member_id) where status 为有效状态』未列举哪些状态算有效状态，而 S3 又用『数据库唯一约束 (session_id, member_id) 兜底』保证不产生第二条记录，S5 则要求『取消不封号、可再次预约』。会怎么出错：工程师把 canceled 也算进有效状态时，会员取消后重新预约在插入阶段失败并提示「你已预约该课程」，直接违背 S5；工程师改成复用原 booking 行时，取消历史与 minutes_before_start 快照被覆盖，§9 用于校准取消阈值的数据失真。期望：显式列出有效状态集合（建议恰为 booked，必要时含 attended/no_show/excused，明确排除 canceled/late_canceled/canceled_by_store），并写明取消后重新预约是新建一条 booking 还是复用原记录，两种口径下的幂等键行为一并写清（依据：S3、S5、§10.2 唯一约束）。",
+      "docs/PRD.md §10.2 waitlist_entry.position『入队时确定』+ 唯一约束 (session_id, position)，与 S5『退出候补后队列后位会员位次前移』、S6『位次 = 当前队列最大位次 + 1』自相矛盾；而位次在课表（S2）、候补提示（S6）、我的预约（S4）三处都展示给会员。会怎么出错：队列 A(1) B(2) C(3)，B 退出后 E 入队，E 的 position = 最大位次 + 1 = 4，但队列里实际只有 3 人——会员在三个页面看到「第 4 位」（按存储 position 显示）或「第 3 位」（按实时 rank 显示），同一数字两种口径；若为消除差异去改他人 position，则与『入队时确定』和唯一约束冲突，还可能在被通知者的倒计时期间被改动。期望：明确 position 是入队时固定序号、只用于 FIFO 排序，会员可见的「第 N 位」统一按「当前有效候补记录中 position ≤ 自己的条数」实时计算，并在 S2/S4/S6 三处写明同一算法（依据：R2 严格 FIFO 与 S5 位次前移是两套口径）。",
+      "docs/PRD.md §5.3 R5 与 §10.1 member_store_credit 未定义 no_show_count_30d 的『30 天滚动』如何落地，而 §6.3 D8 要求 UI 明示『近 30 天已 1 次』、S9 要求运营撤销爽约时计数减 1。会怎么出错：若按存储计数器加定时衰减任务实现而任务漏跑，会员 30 天前的 3 次爽约仍留在计数里，禁约期本应早已结束，却在第 4 周再爽约 1 次时立刻被禁 7 天；若按每次查询扫描 30 天内 no_show 记录重算，则运营的『计数减 1』与重算逻辑冲突（改的是 booking 状态，计数已自动变化，再减 1 就减了两次）。期望：明确计数是查询时重算（建议）还是存储计数器加定时衰减，并说明撤销爽约在该实现下对 booking 状态与计数各自的影响；同时补一条验收标准：会员在黑名单期间再次被判定爽约时，banned_until 是以新判定时刻顺延 7 天还是维持原到期时间（依据：R5『到期自动解除、不手动清零』与 S9『计数回退且黑名单状态重新计算』需要唯一解释）。"
+     ],
+     "summary": "PRD 覆盖了 CEO 要求的全部 6 项，验收标准可测试，10 条关键决策都写了「放弃什么」，量化目标全部标注为假设并给了验证方式、未编造外部数据，这些是值得保留的做法。但代入具体数字推演核心流程时，我发现 7 处会导致「照着做会做错、或不同人做出不同结果」的问题：漏点名即全员扣信用与 §7.1 自相矛盾、请假弹窗文案与实际规则矛盾、递补名额是否锁定未定义（直接决定能否达到 ≥50% 递补成功率），以及 3 处数据实体语义撑不起已写明的规则。建议按条目号增量修订后升版本，不需整篇重写。"
+    },
+    {
+     "round": 2,
+     "verdict": "changes",
+     "issues": [
+      "docs/PRD.md §10.2「waitlist_entry 候补记录」+ §5.3 R3 末条：R3 已写明「不得把该计数挂在单条 waitlist_entry 上（一个 entry 只会被通知 1 次，那样规则会失效，见 §10.2）」，但 §10.2 里仍保留 `notify_attempt_count` int（注释就是「同一名额顺延计数，用于『连续 3 次』规则」），并且 R3 反过来让工程师「见 §10.2」求证——两处指向同一张表却给出相反口径；同时 R1/R3/S7/D11/§6.1 反复引用的释放事件实体 `waitlist_release` 在 §10 里完全没有字段清单。会怎么出错：工程师按 §10.2 建表，把计数器留在 entry 上；某名额依次通知 B、C、D，三条 entry 的 notify_attempt_count 都是 1，定时任务永远读不到 3，S7 的「同一释放事件连续 3 次无人确认即停止递补」完全失效，开课前会反复通知第 4、5 位（正是该规则要防的通知噪音），§2 的「递补不空转」也无从度量；而缺 waitlist_release 表，R1 的 `reserved_count = 该场次 status = open 的 waitlist_release 数` 无法落地，D11 的锁定与 S2/R1 的「剩余名额 = capacity - occupied_count - reserved_count」失去数据基础，锁定要么做不出来、要么两条不同实现（存字段 vs 现算）算出不同剩余名额。期望：§10.2 删除 `notify_attempt_count`，新增 `waitlist_release` 字段清单（至少 `id`/`session_id`/`status`(open|filled|declined|expired|abandoned)/`try_count`/`current_entry_id`/`release_reason`/`created_at`/`closed_at`），并把 R3 末条的「见 §10.2」改为指向该实体。依据：R3「不得把该计数挂在单条 waitlist_entry 上」、S7「`try_count` 按单个释放事件计数，不同释放事件各自从 0 开始」。",
+      "docs/PRD.md §10.2「class_session」与「booking」的 status 枚举：S8/S9/R5 三处都要求把整场未点名或未被标记的预约落到 `booking.status = pending_review`，但 §10.2 的 booking 枚举仍是 `(booked|attended|no_show|excused|canceled|late_canceled|canceled_by_store)`，没有 pending_review；同时 S7/D11/R1 依赖的 `reserved_count`（S7 要求与 occupied_count 一起原子维护、R1 要求强制 occupied+reserved ≤ capacity）在 class_session 字段里也不存在（只有 capacity/occupied_count/waitlist_count）。会怎么出错：工程师照 §10 出建表迁移，判定任务无处写 pending_review，S9 承诺给会员的「已结束 · 到场状态待门店确认」与 R5「不计数、不入黑名单」的整场未点名处理都落不了地（只能退化成 no_show，即第 1 轮要修掉的那个误判）；没有 reserved_count 字段，D11 的锁定只能靠现算或另找地方存，而 R1 要求的「任何时刻 occupied_count + reserved_count ≤ capacity（原子更新/乐观锁）」在表结构里无处实现，超卖防线变成口头约定。期望：booking 枚举补 `pending_review`；class_session 增加 `reserved_count` int（注明 = 该场次 status = open 的 waitlist_release 数、原子维护），并说明它与 occupied_count 的更新顺序/事务边界。依据：S8「全部有效预约进入未点名异常（`booking.status = pending_review`）」、S9 首条、R5 第一条、R1「强制 occupied_count + reserved_count ≤ capacity」。",
+      "docs/PRD.md §10.2 两条唯一约束的谓词与 §5.2 S3/S5/S6、§5.3 R2 冲突：(a) booking 的约束只写「唯一索引 `(session_id, member_id)` where status 为有效状态」，没有列出有效状态集合，而 S3 的验收标准里写的是「有效状态集合见 §10.2」——S3 指向 §10.2、§10.2 又只写「有效状态」，全文没有一处给出这个集合；(b) waitlist_entry 只写「唯一 `(session_id, member_id)`」，没有 status 谓词，而 R2 与 S5 都明确「退出的会员不保留原 position，可重新排队」。会怎么出错：(a) 工程师把 `canceled/late_canceled/canceled_by_store` 也算进「有效状态」，会员取消后重新预约会在插入阶段被唯一索引拒绝并提示「你已预约该课程」，直接违背 S5「取消不封号、可再次预约」；改成复用原 booking 行则 `canceled_at`/`minutes_before_start` 快照被覆盖，§9 用于校准 2 小时阈值的数据失真。(b) 会员加入候补（position 2）后点「退出候补」，过一会儿想重新排队，按字面实现第二条记录会撞唯一索引，S6 的错误处理会把冲突翻译成「你已在候补队列第 N 位」——而该会员已经不在队列里，用户看到的是假信息；若为绕开冲突而改回「复用原行」，就与 R2「取得新的更大 position」矛盾，并会被正在倒计时的 position 语义污染。期望：(a) 两处都写死谓词——booking 用 `WHERE status = 'booked'`（对齐 S3），并写明取消后重新预约是新建 booking；(b) waitlist_entry 改为部分唯一 `WHERE status IN ('waiting','notified')`，并写明重复入队的判断（S6）依据同一谓词、重新入队新建记录且 position 取新的最大值 + 1。依据：S3 两条验收标准、S5「取消不封号」、R2「一名会员同一场次同时最多 1 条进行中的候补记录…可重新排队，取得新的更大 position」。"
+     ],
+     "summary": "7 项修订在「规则正文」层面基本都真的改了，而且改得对：§5.2 S8/S9、§5.3 R5/§7.1 已把「教练明确标记 absent」与「整场未点名」彻底分开（D12、pending_review 转运营），S7/R3/D11/§6.4 已把释放名额锁定给被通知者并给出计算公式，S4/S5/R4/§6.2 的请假文案已改为「记录 1 次晚取消，不计爽约」，R2/S2/S5/S6 已统一为「position 固定、会员可见位次按实时 rank 重算」，R3/S7 已把「连续 3 次」计数上移到单个释放事件并写明归零条件，R5/S9 已明确 30 天计数是查询时重算、撤销只改 booking.status、黑名单顺延取 max。代入数字推演（容量 20 已满→A 取消→锁定 1 个名额→课表显示已满→B 15 分钟内确认）账目自洽，不超卖也不重复占位。但本轮有 3 处「规则改了、数据实体清单没跟上」的残留，其中 1 处是文档内部直接自相矛盾（R3 引 §10.2 求证，而 §10.2 留的正是被否决的字段）——照 §10 建表会做错，故退回。"
+    }
+   ]
+  },
+  {
+   "title": "交互设计与视觉风格",
+   "assignee": "designer",
+   "reviewer": "pm",
+   "status": "done",
+   "rounds": 2,
+   "files": [
+    "docs/design.md"
+   ],
+   "reviews": [
+    {
+     "round": 1,
+     "verdict": "changes",
+     "issues": [
+      "docs/design.md §5.2（B2 状态 → 按钮映射）缺「候补中（waiting）」，与 §5.1（B1 有该状态）不一致。会怎么出错：会员已在某场次候补队第 3 位（接口 ④ 已返回 myWaitlistEntry.status='waiting'），从课表点进详情页，页面仍是满员态、底部按钮显示【排队候补】，点击后被服务端以 WAITLIST_DUPLICATE 拒绝并弹「你已在候补队列第 3 位」；详情页也没有去 B4／退出候补的入口，同一会员同一状态在 B1 是【查看候补】、在 B2 是【排队候补】。期望：B2 补「候补中 →〔候补中 · 第 N 位〕+【查看候补】→B4」，位次用实时 rank，与 B1 同源。依据：PRD S2（已在候补中显示「候补中（第 N 位）」）、S6（重复候补只提示位次）、tech-design 接口 ④。",
+      "docs/design.md §5.4 B4(a)、§5.3 B3 卡片、§6.2 表：把「15 分钟确认」「开课前 20 分钟内不再发起递补」写成固定数字，但这两个阈值都是门店级可配置参数（`waitlist_confirm_minutes` 默认 15，不递补阈值 = 该值 + 5）。会怎么出错：门店把 `waitlist_confirm_minutes` 设为 30（S10 允许），会员在 B3/B4 看到的仍是「请在 15 分钟内确认」「开课前 20 分钟内不再发起递补」，实际分别是 30 / 35 分钟——会员可能以为 15 分钟后名额已顺延而主动放弃，或在开课前 25 分钟干等一个不会发生的递补。期望：分钟数改为读取接口返回的 `rule.waitlistConfirmMinutes`（tech ③ 已返回），不递补阈值取该值 +5；或统一标注「默认值，以门店设置为准」。依据：PRD R3（阈值 = waitlist_confirm_minutes + 5min）、S10（参数由运营调整）；同文档 B2 规则区已按「生效值」写，应保持一致。",
+      "docs/design.md §5.2「已约→【已预约 ✓】禁用白底」与 §3 流程 2「入口（三处等价）：… B2 已预约态按钮」自相矛盾。会怎么出错：按 §5.2 实现，B2 上没有任何取消入口（只能回 B3 操作）；按 §3 实现，B2 按钮可点并弹取消/请假弹窗——同一份文档两种做法，测试也无法判定「在详情页点取消」这条用例是否成立。期望：明确其一并全文统一；建议 B2 已约态按钮可点，打开与 B3 完全相同的取消/请假弹窗（沿用服务端 cancelMode），并改写 §3 流程 2 的入口描述。依据：文档内部一致性；PRD S5 只规定点击取消的行为，未限定入口页面。",
+      "docs/design.md §5.1/§5.2 状态枚举、§6.4/§6.7：可预约截止 = `start_at − booking_deadline_minutes`（默认 0，S10 里是运营可调参数），但设计只在 `now ≥ start_at` 才切「已开课」，缺少「预约已截止（未开课）」状态。会怎么出错：门店把 `booking_deadline_minutes` 设为 60，开课前 30 分钟时 B1 卡片/B2 底部仍显示可点的【立即预约】（可能还有剩余名额），点击后服务端按 tech-design §6.2 `now ≥ start_at − bookingDeadlineMinutes → SESSION_STARTED` 返回「已开课/不可预约」——课还没开却告诉会员「已开课」，按钮状态在点击前就是错的。期望：增加「预约已截止」状态与文案（数值读生效值，如「已过预约截止时间（开课前 60 分钟）」）；或在文档中明确 MVP 固定 `booking_deadline_minutes = 0`、不开放该参数，二者择一并写进 §9。依据：PRD S3「场次可预约的截止时间 = start_at（默认 booking_deadline_minutes = 0）」、S10 参数清单、tech-design §5.2 错误码表。",
+      "docs/design.md §4.5 状态标签 Tag 与 §7.1：「实测对比度 > 7:1」与实测不符，且「已约」标签只写「深绿字」未给色值。会怎么出错：实测 `#C2410C` on `#FDEDE4` = 4.54:1、`#C62828` on `#FBE9E9` = 4.80:1（11px 属小字，AA 要求 4.5:1，勉强通过但远不是 7:1）；若「已约」按 §4.2 定义的语义-成功 `#14804A` on `#E6F4EC` 实现，则为 4.39:1，**低于 AA**——开发照 §4.2 的色值做就会得到一个不合格的标签。期望：给出标签文字的确切色值（建议已约用 `#165B3F` = 7.12:1），并把 §7.1 的结论改成实测值（≥4.5:1 达标即可，不要写 >7:1）。依据：文档 §4.2/§7.1 自称全部达 WCAG AA（小字 4.5:1）。"
+     ],
+     "summary": "设计文档整体质量很高：IA/跳转图/5 条流程（含出错路径）/5 个页面线框/文案红线/对比度实测都做得扎实，主色系 12 个色的对比度我逐个复算全部与文档标注一致。但有 5 处必须修正：B2 详情页缺「候补中」状态、递补阈值文案写死默认值、B2「已约」按钮与取消入口自相矛盾、可配置的预约截止参数没有界面状态、标签对比度声明与实测不符（其中一处可能低于 AA）。"
+    },
+    {
+     "round": 2,
+     "verdict": "pass",
+     "issues": [],
+     "summary": "第 1 轮 5 条必须修改全部真实改到位，且改后与 PRD/技术方案口径一致，可以交付。1）B2 已补「候补中（waiting）→〔候补中·第 N 位〕+【查看候补】→B4」，位次取实时 rank，§3 流程 1、§5.2 优先级 4)、§6.1 新增行三处同源，并明确\"绝不显示【排队候补】/WAITLIST_DUPLICATE\"。2）可配置阈值已全部占位符化（§3 参数化约定 + §5.3/§5.4/§6.2 的 {确认时限}/{取消截止}/{预约截止}，不递补阈值 = {确认时限}+5），字段名 rule.waitlistConfirmMinutes / cancelDeadlineMinutes / bookingDeadlineMinutes 与技术方案接口 ③/④ 完全一致；仅\"30 分钟\"保留为 PRD S7 固定上限并注明不随门店参数变化，正确。3）B2 已约态按钮改为可点的【取消预约】/【我要请假】（由服务端 cancelMode 决定），§2.3 跳转图、§3 流程 2\"两处等价\"、§4.5 底部操作栏组件规格三处已同步，全文统一。4）新增「预约已截止（未开课，now ≥ start_at − {预约截止}）」状态，落在 §5.1 卡片、§5.2 优先级 5)、§6.7 文案，并明确\"不得写已开课\"，与 tech-design 的 SESSION_STARTED 判定对齐；§9-9 已向产品经理提出二选一。5）「已约」标签文字色改为 #165B3F，§7.1 结论改为实测区间 4.54:1～7.12:1，并补了 #14804A on #E6F4EC = 4.39:1 的反例禁用说明。我用 WCAG 公式复算了 5 个标签组合（7.12 / 4.54 / 4.80 / 5.45 / 反例 4.39）与 §4.2 全部 12 个色值（5.28 / 8.06 / 5.18 / 4.98 / 5.62 / 6.28 / 5.93 / 15.8 / 6.15 / 4.83 / 2.60），逐个与文档标注一致，无编造数字。\n\n🟡 建议（不退回，建议下一版顺手改）：\n1. §5.2 状态→按钮映射第 1)条把\"黑名单\"放在最高优先级，会盖掉第 3)条的已约态——黑名单期且过去有已约课的会员，在 B2 会看到按钮置灰\"权限暂停至…\"、无法取消/请假，而 §5.3（§6.5 也只写\"预约/候补按钮置灰\"）在 B3 仍给出【取消预约】/【我要请假】，同一操作两页行为不一致。PRD R5 的惩罚范围只含\"不可预约、不可候补、不可递补确认\"，不含禁止取消；建议明确\"黑名单不影响已约场次的取消/请假入口\"，并把它加进 §6.5 的表。\n2. §5.1 卡片状态映射、§3 流程 1 的分支枚举顺序（都先写\"剩余 0→【排队候补】\"再写\"已约/候补中\"）与 §5.2 的判定优先级顺序相反。虽然两处都注明\"判定优先级与 B2 一致，见 §5.2\"，但逐条实现的人仍可能在课表页把候补中的会员渲染成【排队候补】——正是第 1 轮要求修掉的那类错。建议直接按 §5.2 的编号重排。\n3. \"预约已截止\"窗口内【排队候补】是否仍可用没有定义：PRD S6 只规定\"now ≥ start_at 时候补关闭\"，而 §5.2 的第 5)条排在满员（第 6)条）之前，等于把候补也提前关了。默认 booking_deadline_minutes = 0 时二者等价、无影响；若门店真把它设成 60（S10 允许），就会出现\"未开课但候补按钮也不见了\"。建议要么写明\"候补截止时间为 start_at\"，要么在 §9 增一条待确认。\n4. §5.2 第 2)条要求\"已约 + 已开课\"时保留〔已约〕标签 + \"已开课，等待教练点名结果\"，但 §5.1 该状态只写〔已开课〕+置灰，B1 与 B2 标签不一致，建议补一句同源说明。\n\n💭 小改进：§4.5 底部操作栏写\"右为主按钮\"，而 §5.2 已约态用的是描边按钮（危险/破坏性动作不宜用实心主色，建议统一措辞）；§4.2 的\"主色系标签底 #E8F4EF\"与 §4.5 标签底 #E6F4EC 是两个近似值（两者配 #165B3F 都 ≥7:1，建议统一为一个）；§5.4 降级条文案\"确认时限已延长至 30 分钟\"在开课临近时实际是 min(30min, start_at − now)，建议改成不含具体分钟数的措辞。\n\n值得保留的做法：参数化文案约定放在 §3 开头全文生效、并明确\"15/20/120 都是默认值示例\"，这一条让后续改门店参数不会再漏；§6.6 把任务里的\"签到码校验失败\"映射为 PRD 允许的等价异常并说明需要先改 PRD，处理得比硬造一屏更诚实；§9 的 10 条待确认项都指定了要谁回答，产品/CEO 可以直接照着拍板。"
+    }
+   ]
+  },
+  {
+   "title": "技术方案设计",
+   "assignee": "engineer",
+   "reviewer": "qa",
+   "status": "done",
+   "rounds": 2,
+   "files": [
+    "docs/tech-design.md"
+   ],
+   "reviews": [
+    {
+     "round": 1,
+     "verdict": "changes",
+     "issues": [
+      "[P1] waitlist_count 只有 +1、全文无递减路径（§4.2 字段定义、§6.3 入队 SQL、§6.4 递补/超时、§5.3 ⑨ 退出候补、§5.5 ㉓ 门店取消整场）。会怎么出错：capacity=20 的场次，会员反复『入队→退出候补』20 次后计数器=20 而队列里 0 人，此后所有人点『排队候补』都命中 waitlist_count < waitlistCapacity 不成立 → 返回 WAITLIST_FULL『候补已满』，直到场次结束都不恢复，名额释放时也无队可递补。期望：或按记录数实时判定上限（count(status IN ('waiting','notified'))，与 PRD R2 口径及 §6.3 的 rank SQL 同源），或在所有离开队列的路径（退出/超时/放弃/确认/整场取消清零）同事务递减，并加每日对账 waitlist_count == count(waiting/notified)。依据：PRD R2『候补上限按 status ∈ {waiting, notified} 的记录数计』、S6。",
+      "[P1] 认证与角色链路不完整（§5.3 ① POST /api/auth/login 只返回 member，无角色；§5.4 教练端接口假定 JWT 带 role='coach'；§6.6 只提『一次性邀请码绑定到 openid』但无端点；§8.2 把它列为运营侧外部依赖）。会怎么出错：教练打开小程序拿不到角色 → 无法决定渲染哪套 tabBar（design §2.2 明确要求按 user_role 渲染 2～3 个 tab 并请工程师确认，本方案未回答）；教练身份没有绑定入口，M5 排了『教练登录/点名』5 人日却无对应设计，S8/S9 整条 P0 无法上线；单角色 JWT 也无法支持 design 要求的『教练同时也是会员』切换。期望：登录响应返回角色（roles/coachId/storeId 或 JWT 多角色）；补教练身份绑定接口（或写清后台录入流程与阻塞关系）；明确回复 design §9-2 是否使用 custom-tab-bar。依据：PRD S8『以手机号 + 门店邀请/后台绑定教练身份』、R7；design §2.2。",
+      "[P1] /api/schedule 的 storeId 必填，但全文没有任何门店列表接口，而 member.home_store_id 可空（nullable）（§5.3 ③、§4.1）。会怎么出错：未绑定会员（PRD S1 断言『可浏览课表但预约/候补按钮置灰』）或 home_store_id 为空的会员打开首页时客户端无 storeId 可传 → 课表空白，S1/S2 的『可浏览』验收在真机无法通过；design B1 的多门店切换同样没有数据来源。期望：增加 GET /api/stores（含默认门店），或 storeId 可选并在缺省时回落 home_store_id → 唯一 active 门店。依据：PRD S1、S2『默认选中该门店，可手动切换』、Q2 默认按多门店模型实现。",
+      "[P1] 无会员信用/黑名单状态接口（§5.3 ①～⑪、§5.2 仅有 MEMBER_BANNED 的 403 details）。会怎么出错：黑名单会员打开首页不点按钮就不会产生 403，B1 红条『预约权限已暂停至 YYYY-MM-DD HH:MM』拿不到数据，不满足 PRD S9『按钮置灰并显示剩余解除时间』；design §6.5 要求的『近 30 天在该店已 N 次』也无数据来源。期望：增加 GET /api/me/credit?storeId=（noShowCount30d、noShowThreshold30d、bannedUntil、banReason），或并入 login / me/bookings 响应，且 noShowCount30d 必须走 §6.7 实时重算口径而非直读 _cache。依据：PRD S9、R5；design §5.1/§6.5。",
+      "[建议-1] §5.3 ⑩ 确认递补只校验 release 是否 open，未校验 now < session.start_at 与黑名单。情形：19:00 开课、19:00:05（超时扫描 30 秒周期未到）点确认仍成功，生成已开课课程的 booked 预约（19:10 点名名单出现『补位加入』）；黑名单会员也能确认成功。期望：裁决点前加 now >= start_at → 关闭 release 并顺延（WAITLIST_CLOSED）、banned_until > now → MEMBER_BANNED 并顺延。依据：PRD S7『now ≥ start_at 全部置 expired』、S9 惩罚范围。",
+      "[建议-2] §5.3 ③/④ 响应字段缺口：session 项无 confirmDeadlineAt（B1 卡片『待确认递补 · 剩余 mm:ss』无数据源）与 occupiedCount/reservedCount（PRD S2 详情验收要求展示『已约人数』，而客户端只有 remaining+capacity 算不出）。期望：补 occupiedCount、reservedCount、myWaitlistConfirmDeadlineAt。",
+      "[建议-3] §5.5 ⑳ 容量下调是『先查再 UPDATE』，与 §6.2『判断放进 WHERE』的原则不一致；并发预约时会撞 CHECK 约束（23514）→ 返回 500 INTERNAL_ERROR 而不是 CAPACITY_CONFLICT。期望：改为条件更新 WHERE capacity + $delta >= occupied_count + reserved_count，并把 23514 映射为 CAPACITY_CONFLICT。",
+      "[建议-4] §5.5 ⑳ 示例响应 releasesCreated=2/notified=1 与 §6.4 步骤 4（无下一顺位时不建 release、空位保持空闲可约）矛盾；按示例实现会把第二个空位锁住最多 30 秒无人可约。期望统一口径并改示例。",
+      "[建议-5] §6.7 黑名单重算伪代码只写 event_log('ban_applied')，未写 outbox；PRD S9 要求『立即发送通知说明原因、生效区间、解除时间与申诉方式』，§10.3 biz_type 也列了 ban_applied。期望补 notification_outbox 写入并接入 §6.8 降级。",
+      "[建议-6] §5.3 ② 使用 PHONE_ALREADY_BOUND，但 §5.2 错误码总表没有这条，客户端映射文案会漏（PRD S1 边界要求提示『该手机号已被绑定，请联系前台』）。期望补进总表。",
+      "[建议-7] PRD S13 的『手动递补需记录操作人与原因』在 §5.5 没有对应端点（仅 M7 与砍法提及，design D2 有该操作）。期望补 POST /api/staff/sessions/:id/manual-promote（audit_log manual_waitlist）或明确本期不做并同步设计。",
+      "[建议-8] §5.5 ㉑ 未定义运营把未点名异常处理为 attended 时是否补写 check_in；PRD §2 的爽约率分母与点名完成率都以『是否存在 check_in』为口径，两处会分叉。期望明确是否补写（建议写，marked_by_role='staff'）。",
+      "[建议-9] §6.2 原子占位 SQL 的 start_at > now() 与 §5.3 ⑦/伪代码的 now < start_at - booking_deadline_minutes 两处阈值不一致（默认 0 时等价，门店改配置后不等价）。期望统一为 start_at - $bookingDeadlineMinutes > now()。",
+      "[建议-10] §5.4 ⑭ 步骤 3 允许改 attended 的预约，但点名窗口在 start_at+15min 就关闭、结算在 end_at 之后，该分支实际不可达；建议删除或注明运营改结果走 ㉑/㉒。",
+      "核实声明：§0/§10 自述『13 张表』『3 个部分唯一索引』『25 个错误码』与正文不符（实际 18 张表、2 个部分唯一索引、总表 26 条错误码）；§4.3 引用『本文档 §4.4』作为事件定义位置有误（事件定义在 §4.3）。请把自述数字改为可核对的值，避免评审按错误规模判断工作量。"
+     ],
+     "summary": "技术方案主体扎实、可推演：防超卖三道防线、递补单裁决点（waitlist_release 条件更新）、try_count 挂在释放事件上、pending_review 兜底、计数实时重算、outbox 通知都与 PRD R1–R7/S7 口径一致，我代入 50 并发抢 5 位、连续 3 次超时顺延、20 分钟门槛、整场未点名等场景走了一遍均成立；但存在 4 处必须修改：waitlist_count 只增不减会把候补永久判为\"已满\"、认证链路缺角色与教练绑定接口导致教练端( P0 )进不去、storeId 必填且无门店列表导致未绑定会员无法浏览课表（违反 S1）、缺会员信用状态接口导致黑名单置灰/解除时间/近 30 天 N 次无数据来源。另核实汇报数字与正文不符（13 张表实为 18、3 个部分唯一索引实为 2、25 个错误码实为 26 条且 PHONE_ALREADY_BOUND 未入总表）。"
+    },
+    {
+     "round": 2,
+     "verdict": "changes",
+     "issues": [
+      "[P1] 候补上限判定口径在 §6.3 仍是缓存计数器，且递减/对账路径不完整。位置：docs/tech-design.md §6.3 入队 SQL，与 §4.2 class_session.waitlist_count 注释、§4.5 派生值表、§5.3 ⑧ 校验顺序矛盾。实际：§4.2/§4.5/§5.3⑧ 都写“上限一律按 status IN ('waiting','notified') 的记录数实时判定，waitlist_count 只是展示缓存”，但 §6.3 唯一的实现仍是 `UPDATE class_session SET waitlist_count = waitlist_count + 1 WHERE id=$1 AND waitlist_count < $waitlistCapacity`（仍以缓存列判定）；§4.2 承诺的“每条 entry 离开 {waiting,notified} 时同事务 −1”只写在 §5.3 ⑨（退出）与 ⑪（放弃），§6.4 确认成功（notified→confirmed）、§6.4 超时扫描（notified→expired）、§5.5 ㉓ 门店取消整场（waiting/notified→canceled_auto）三处没有递减语句；§4.2 声称的“每日对账自愈”在 §6.7 的 4 个任务里没有落点。会怎么出错：工程师按 §6.3（全文唯一给出实现的地方）落库，某场次 capacity=20、候补上限 20，会员反复“入队→被通知→确认成功”20 次后计数器=20 而队列为 0 → 之后所有人点「排队候补」都返回 409 WAITLIST_FULL「候补已满」，直到场次结束都不恢复，名额释放时也无人可递补；整场取消后计数器更会永久非 0。期望：二选一并把 §6.3 改到一致——① 改为“锁场次行（SELECT ... FOR UPDATE 或 UPDATE updated_at）后用 count(status IN ('waiting','notified')) 判定上限”，waitlist_count 仅展示；或 ② 保留计数器但在 ⑨/⑪/确认成功/超时 expired/㉓ 整场取消（置 0）五条路径同事务递减，并在 §6.7 补一条与 reserved_count 同级的每日对账断言 waitlist_count == count(waiting/notified) 并写明由哪个任务执行。依据：PRD R2「候补上限按 status ∈ {waiting, notified} 的记录数计」、PRD S6「候补队列人数已达上限 → 阻止并提示」。",
+      "[P1] member 建行/绑定口径与 DDL 互相矛盾，且 §5.3 ② 引用的 §9-Q10 不存在。位置：§4.1 member 表（openid text NOT NULL UNIQUE、phone NULL “授权手机号后写入”）vs §5.3 ② POST /api/auth/bind-phone 流程（“匹配到且 openid 为空 → 写入 openid”“未匹配 → MEMBER_UNBOUND 该手机号未被门店录入”）；§5.3 ② 末尾“此假设已列入 §9-Q10”，而 §9 只有 Q1～Q8。会怎么出错：① 门店按 §4.1 预录会员（PRD S1“门店已在后台录入会员手机号”）时 openid 为空的 INSERT 直接违反 NOT NULL，预录失败；② 若按 §4.1 实现（登录建行、绑定写 phone），§5.3 ② “openid 为空”的分支永不成立，会员授权手机号后一律走到 MEMBER_UNBOUND → S1（P0）绑定永久失败，S3/S5/S6/S7 的按钮长期置灰；③ 若同时按 ① 建行、按 ② 回填 openid，两条同 openid 的行撞唯一约束 23505，总表未映射 → 返回 500 INTERNAL_ERROR；④ ② 未定义“匹配到且 openid 就是我自己”（重复绑定）的分支。期望：明确一种口径并让 §4.1/①/② 一致，且把该问题真正写进 §9（新增 Q10）。方案 A（门店预录为真）：member.openid 允许 NULL，写明门店预录的写入路径、openid 回填与合并规则、以及登录临时行与 (openid) 唯一约束的冲突处理；方案 B（登录建行为真）：删除“openid 为空”分支，改为取 jwt.sub 的 member 行、用微信返回手机号与该行 phone（或门店名册）比对后写 phone + bind_status='bound'，并写明“该手机号已被其他 openid 绑定”的判定方式。依据：PRD S1「服务端以 openid 创建/匹配 member 记录」「Given 门店已在后台录入会员手机号 … 与记录匹配 → 绑定成功」「边界：同一手机号被两个 openid 绑定 → 提示该手机号已被绑定，请联系前台」、PRD §10.1 member 字段清单。"
+     ],
+     "summary": "第 1 轮 4 条必须修改中 3 条已真正补齐（登录返回多角色 + ㉗ 教练绑定 + custom-tab-bar 回复；㉕ 门店列表 + storeId 可选 + 默认门店回退链；㉖ /api/me/credit 的 bannedUntil/实时重算次数），可推演通过；但第 4 条只改了\"声明\"：唯一给出实现的 §6.3 入队 SQL 仍以 waitlist_count 缓存列作上限判定，且确认成功/超时/整场取消三条离开路径仍无递减，按文档实现会重现\"候补永久判为已满\"的原缺陷；另发现 1 处新的硬矛盾：§4.1 member.openid NOT NULL 与 §5.3 ② \"匹配 openid 为空的门店预录行\"互斥，且 §5.3 ② 引用的 §9-Q10 不存在，会导致 S1 绑定在真机上跑不通。其余为未处理的第 1 轮建议（§6.7 缺 ban_applied outbox、缺手动递补端点且 §4.2/§5.1 引用了不存在的 ㉘、㉑ 未定义是否补写 check_in、§6.2 阈值未统一）与自述数字残留（§10 的\"24 端点/25 错误码\"、§0 与 §8.1 的 29 vs 30 人日、ADR-10 引用悬空），均不阻塞。"
+    }
+   ]
+  },
+  {
+   "title": "测试计划与用例",
+   "assignee": "qa",
+   "reviewer": "engineer",
+   "status": "done",
+   "rounds": 2,
+   "files": [
+    "docs/test-plan.md"
+   ],
+   "reviews": [
+    {
+     "round": 1,
+     "verdict": "changes",
+     "issues": [
+      "docs/test-plan.md §3.7.1 时序专项（场景头 + T0 行 + T0+25min 行，并牵连 TC-S7-01①）：场景数据与断言算错三处。①场景头写 occupied=19 且队列 [a,b,c] 3 人，二者不能共存——按 R1 公式 remaining = 20−19−0 = 1 > 0，而 PRD S6 要求剩余名额为 0 且 now < start_at 才能入队，初始状态造不出来；②T0 断言「课表 remaining 同步 -1」与 R1 公式矛盾：取消使 occupied −1、锁定使 reserved +1，remaining 不变（满员场景 0→0，此时才成立的是「其他会员见已满」）；③T0+25min 的「c 超时」早于 c 自己的确认截止——c 在 T0+17min 被通知，confirm_deadline_at = min(T0+17+15, start_at) = T0+32，T0+25min 扫描不会动作。会怎么出错：执行时（a）造不出初始状态；（b）断言 remaining 减 1 在正确实现下必然失败，或诱导工程师把「锁定名额」实现成扣容量，导致课表长期显示已满却查不出原因；（c）T0+25min 断言 abandoned/临期空位失败（真实要等到 T0+32；若 start_at 更早例如 T0+22min，结局是 release expired、名额作废，不是 abandoned/临期空位）。期望：场景头写明「取消前 occupied=20（满员），取消后 occupied=19、reserved=1」；T0 断言改为按公式 remaining = 20−19−1 = 0 且其他会员点预约得 SESSION_FULL；T0+25min 改为 T0+32min（或注明 c 的 deadline），并区分「到点超时 → abandoned」与「已开课 → expired 作废」两种结局；同时把 PRD S7 的「课表剩余名额同步减 1」这一措辞列入 §4 待澄清（它与 R1 公式不是同一件事）。依据：PRD R1「会员可见剩余名额 = capacity − occupied_count − reserved_count」、PRD S6、PRD S7「其他会员看到已满、不可直接预约」、tech-design §6.4（confirm_deadline_at = LEAST(now()+confirmMinutes, start_at)）。",
+      "docs/test-plan.md §1.2 第 2 条 + §4 [P2]-3（并涉及 §3.5、§6）：声称 27 个端点、30 条错误码逐条可触发且文案可展示，但全文没有能触发 CANCEL_WINDOW_PASSED、SESSION_NOT_FOUND、SESSION_CANCELED、WAITLIST_ENTRY_NOT_FOUND、STORE_NOT_FOUND 的用例；更关键的是 CANCEL_WINDOW_PASSED 在 tech-design 里没有任何返回路径——§5.3⑦ 的判定只有三支（now ≤ start_at − cancel_deadline → ontime；enable_late_cancel 且 now < start_at → late；now ≥ start_at → SESSION_STARTED），当门店把 enable_late_cancel=false（PRD §8.3 开关③，关闭后恢复硬截止）且 now 落在 (start_at − cancel_deadline, start_at) 时没有分支。会怎么出错：门店关掉晚取消后，会员在截止后点取消，实现者照 ⑦ 落代码会走到未定义分支（返回 500 INTERNAL_ERROR 或静默成功），客户端拿不到 CANCEL_WINDOW_PASSED，design 的硬截止降级（无请假按钮、请求被拒 + 提示）无法验收，PRD 的保险丝③实际不可用；同时「30 条逐条可触发」这一验收口径无证据支撑，与本文档 §6「未验证（需运行）」的严谨做法自相矛盾。期望：①在 §3.5 补用例 enable_late_cancel=false、now = start_at−60min → 期望 409 CANCEL_WINDOW_PASSED、booking 仍为 booked、名额不释放；并补 SESSION_NOT_FOUND / SESSION_CANCELED / WAITLIST_ENTRY_NOT_FOUND / STORE_NOT_FOUND 的触发用例，或把 §1.2(2) 改成「已覆盖 N 条，其余逐条在执行期补并出错误码→用例对照表」；②把「⑦ 缺 enable_late_cancel=false 分支、CANCEL_WINDOW_PASSED 无返回路径」补进 §4 评审结论。依据：PRD §8.3 开关③、tech-design §5.2 错误码总表、§5.3⑦ 判定分支。",
+      "docs/test-plan.md §3.7 TC-S7-07 与 §3.7.2 状态机矩阵中 waitlist_release 的 open→abandoned（无下一顺位）行：用例期望「释放时队列无 waiting → release → abandoned、reserved_count −1」，但 tech-design §6.4 步骤 4 在创建 release 之前就判断 if !head → 空位保持空闲可约、返回 NO_WAITLIST；§6.5 明确「队列为空…不创建释放事件、不锁定」；§5.5⑳ 也写「没有下一顺位的空位不建 release、不加 reserved_count」。会怎么出错：最常见路径（满员场次有人取消、队列恰好为空）按用例断言 waitlist_release 会新增一行 abandoned 且 reserved_count 先 +1 再 −1，实际两件事都不会发生（不建 release），断言必然失败并报出假缺陷；反向若工程师为迁就用例改成先建 release 再立即 abandon，则与 §5.5⑳ 及 r2 已确认的口径冲突，waitlist_release 会堆无意义行、期间 reserved_count 瞬时 +1 使 remaining 显示 0，与「名额保持空闲可约」直接矛盾。另外 §3.7.2 用该用例覆盖 open→abandoned 的「无下一顺位」分支无效（该分支实际由 TC-S7-06 覆盖）。期望：TC-S7-07 改为断言可观测结果——不创建 release、reserved_count 不变、remaining 回到 1、其他会员可直接预约成功、promotionSkippedReason = NO_WAITLIST；并把「PRD R3 ④（无下一顺位→abandoned，隐含 release 行存在）与 tech §6.4 步骤 4（队列空时不建 release）在 release 行是否存在上口径不同」列入 §4 请工程师/产品确认；§3.7.2 的 open→abandoned 行改引 TC-S7-06/10/16。依据：tech-design §6.4 步骤 4、§6.5（不发起递补的三种情况）、§5.5⑳；PRD R3 ④、S5 边界。"
+     ],
+     "summary": "测试计划整体质量高：范围与策略、S1–S13 逐条映射、任务点名的边界（最后一席、候补第 1/末位、取消截止闭区间、点名窗口端点）与异常（并发、网络失败重试、重复提交、通知未送达）都在，候补递补时序＋状态机专项、缺陷分级与回归范围，以及无运行产物时一律标「未验证（需运行）」的诚实做法值得保留。我逐条核对了 §4 的 19 条评审结论（与 PRD / tech-design / design / r1 / r2 原文对照）：[P1]-1～[P1]-6、[P1]-8、[P1]-9、[P3]-1/-2 都能在原文找到依据，27 个端点 / 30 条错误码、19 表 / 3 个部分唯一索引等自述数字也核实无误。但有三处必须改：§3.7.1 时序专项的前置数据与时间轴算错（照做会写出必然失败或误判实现的断言）、§1.2 声称 30 条错误码逐条可触发无支撑且漏了 CANCEL_WINDOW_PASSED 在技术方案里根本没有返回路径、TC-S7-07 的机制期望与 tech §6.4/§6.5/§5.5⑳ 冲突。三处都是局部修改，改完即可交付。"
+    },
+    {
+     "round": 2,
+     "verdict": "changes",
+     "issues": [
+      "docs/test-plan.md §3.5（TC-S5-15）、§4 评审结论表、§1.2 第 6 条：`enable_late_cancel=false`（PRD §8.3 开关③）的硬截止路径只有界面级断言（「截止后无【我要请假】」），没有接口级用例，§4 也没把「tech §5.3⑦ 缺该分支、CANCEL_WINDOW_PASSED 无返回路径」列为待确认项（§4 全文未出现该错误码）。会怎么出错：门店按 PRD §8.3 关掉保险丝③后，会员在 `start_at-120min < now < start_at` 提交 ⑦ 取消时，tech §5.3⑦ 的三个分支（`now ≤ start_at-120min`→ontime / `enable_late_cancel` 且 `now < start_at`→late / `now ≥ start_at`→SESSION_STARTED）全不命中，实现者只能落到未定义分支：或 500 INTERNAL_ERROR（会员看到「服务异常」），或顺势按 ontime 落库（记成「正常取消、无处罚」，与门店已关闭的规则不符，`cancelType`/`minutes_before_start` 统计口径被污染）。design §8 的「关晚取消 → 过截止后无【我要请假】」无法验收，PRD §8.3 的保险丝③实际不可用。期望：① §3.5 把 TC-S5-15 提升为接口级用例：`enable_late_cancel=false`、`now = start_at-60min` → 期望 `409 CANCEL_WINDOW_PASSED`、booking 仍为 `booked`、`cancelType` 为空、`occupied_count`/`reserved_count` 不变、无名额释放、无 outbox、无递补；② §4 增加条目记录「tech §5.3⑦ 无 `enable_late_cancel=false` 分支、`CANCEL_WINDOW_PASSED` 全文无返回路径」，请工程师补分支或明确该开关只由客户端界面实现并写清接口返回什么。依据：PRD §8.3 开关③、tech §5.2 `CANCEL_WINDOW_PASSED`、tech §5.3⑦、design §3 流程 2 / §8 自查表。",
+      "docs/test-plan.md §1.2 第 2 条、§4 [P2]-3：§1.2 把「30 条错误码逐条可触发且文案可展示」写进测试范围，§4 [P2]-3 的期望情况写「已列入 TC 矩阵逐条核对」，但全文没有「错误码 → 用例」对照矩阵（§3.7.2 是状态机矩阵），逐条核对后有 5 条没有触发用例：`CANCEL_WINDOW_PASSED`、`SESSION_NOT_FOUND`、`SESSION_CANCELED`、`WAITLIST_ENTRY_NOT_FOUND`、`STORE_NOT_FOUND`；`BOOKING_STATE_CONFLICT` 只在 TC-S5-13 以提示文案出现、未断言 code。这 5 条都是 tech-design 里真实可达的路径（§6.2 伪代码 `session.status='canceled' → SESSION_CANCELED`；§5.1 默认门店回退链三处皆空 → `STORE_NOT_FOUND`；⑩/⑪ 传不存在的 entryId → `WAITLIST_ENTRY_NOT_FOUND`）。会怎么出错：开发期做接口验收时这条范围无法执行——例如门店取消整场后仍有会员提交预约，究竟返回 409 `SESSION_CANCELED` 还是 `SESSION_STARTED`／静默失败无人验证，客户端「刷新课表」降级拿不到验收；`STORE_NOT_FOUND` 是「无 active 门店」这一极端情况的唯一出口，无用例只能靠开发自测。期望（二选一，任选其一即可通过）：① 补这 5 条用例（请求构造 + 期望 HTTP/code + 客户端文案，409 类必须断言刷新）；② 把 §1.2 第 2 条改为「已覆盖 N/30 条，其余在执行期补」，并在 §4 补「错误码 → 用例」对照表或未覆盖清单，使 [P2]-3「已列入 TC 矩阵」与实际交付一致。依据：tech §5.2（共 30 条）、§5.1 默认门店回退链、§6.2 伪代码、§5.3⑩/⑪。",
+      "docs/test-plan.md §3.7 TC-S7-01（其中写「PRD S7 原文『剩余名额同步减 1』的措辞见 §4 [P2]-5」）与 §4（[P2] 段只有 -1～-4）：引用悬空，§4 没有 [P2]-5。上一轮要求补的「PRD S7『课表剩余名额同步减 1』与 R1 公式不是同一件事」这条待澄清项没有落地。会怎么出错：读者按引用找不到该条，口径澄清丢失——下一位照 PRD S7 字面『同步减 1』实现或写断言的人，会把满员场次的取消（`occupied -1` + `reserved +1`，remaining 恒为 0）当成「remaining −1」，重新踩 §3.7.1 刚修正的坑。期望：在 §4 补上该条目（用 [P2]-5 或顺延编号），内容至少说明：PRD S7/R3 的『课表剩余名额同步减 1』与 R1 公式 `remaining = capacity - occupied_count - reserved_count` 描述的不是同一件事——取消触发的锁定同时使 `occupied -1`、`reserved +1`，会员可见的 remaining 不变；该措辞只在只增 `reserved` 的场景（如运营加容量后再锁定）字面成立。并让 TC-S7-01 的引用编号与新条目一致。依据：PRD R1、PRD S7 首条（『课表「剩余名额」同步减 1』）、tech §6.4/§6.5。"
+     ],
+     "summary": "复查结论：上一轮三条意见里，第 1 条（§3.7.1 时序专项 + TC-S7-01①）和第 3 条（TC-S7-07 + §3.7.2）已按原文改对，我逐条对 PRD R1/R3/S7 与 tech §6.4/§6.5/§5.3⑦/§5.5⑳ 核对无误；但第 2 条（错误码覆盖 + CANCEL_WINDOW_PASSED 无返回路径）完全没动，且修复过程中新增一处悬空引用，返工未完成，需再改这三处（都是局部修改）。测试汇报里「三条意见全部成立、先修 §3.7.1」与实际文件一致，末尾「可能没有全部完成」的自述属实。"
+    }
+   ]
+  }
+ ],
+ "escalations": 3
+}

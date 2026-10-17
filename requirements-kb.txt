@@ -1,0 +1,3 @@
+# 可选：公司知识库的本地向量模型（按意思检索）。
+# 没有安装时知识库只用关键词检索。第一次使用会从 Hugging Face 下载 BAAI/bge-small-zh-v1.5（约 95 MB）到 ~/.opc/models
+fastembed>=0.4

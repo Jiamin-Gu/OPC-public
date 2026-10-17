@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OPC · 一人公司</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <button class="icon-btn nav-toggle" id="navToggle" title="频道" hidden>☰</button>
+    <div class="brand" id="brand"><span class="logo">OPC</span><span class="brand-text">一人公司</span><span class="conn" id="conn"></span></div>
+    <div class="company-title" id="companyTitle" hidden>
+      <button class="btn ghost small" id="backBtn">← 公司列表</button>
+      <div class="ct-text"><div class="ct-name" id="ctName"></div><div class="ct-mission" id="ctMission"></div></div>
+    </div>
+    <div class="spacer"></div>
+    <div class="actions" id="companyActions" hidden>
+      <span class="run-progress" id="runProgress" hidden></span>
+      <span class="state-chip" id="stateChip">空闲</span>
+      <button class="usage" id="usage" title="点击查看用量明细">0 tokens</button>
+      <button class="btn ghost small" id="companyModelsBtn" title="投入档位和模型">⚙ 设置</button>
+      <button class="btn ghost small panel-toggle" id="panelToggle">看板</button>
+    </div>
+  </header>
+  <div class="banner" id="banner" hidden></div>
+
+  <!-- ============ 首页：公司列表 + 创建公司 ============ -->
+  <main class="home" id="home" hidden>
+    <section class="home-col">
+      <h2>我的公司</h2>
+      <div class="company-list" id="companyList"></div>
+    </section>
+    <section class="home-col create">
+      <h2>创建一家公司</h2>
+      <p class="muted">你是 CEO。选好团队成员，就可以给全公司下令，或者单独找某位员工。</p>
+      <form id="createForm">
+        <label class="field"><span>公司名称</span><input id="cName" maxlength="40" placeholder="例如：轻记科技" required></label>
+        <label class="field"><span>公司目标</span><textarea id="cMission" rows="2" placeholder="例如：做一款帮大学生管理生活费的记账小程序"></textarea></label>
+        <div class="field"><span>模型 <button type="button" class="link-btn" id="modelsBtn">⚙ 管理模型连接</button></span>
+          <select id="cModel"></select>
+          <em class="muted field-note">全公司默认用这个模型；个别成员可以在卡片的 ⚙ 里单独换，以后也能在公司里一键改。</em></div>
+        <div class="field team-head"><span>团队成员 <em class="muted" id="roleCount"></em></span>
+          <button type="button" class="btn ghost small" id="libraryBtn">＋ 从角色库添加</button></div>
+        <div class="role-grid" id="roleGrid"></div>
+        <label class="run-toggle" id="runToggle" hidden>
+          <input type="checkbox" id="cAllowRun" checked>
+          <span><b>允许工程师运行代码</b><br>
+            <em class="muted">工程师写代码用的编码 agent 已经装好。勾选后它还会实际运行代码（例如跑测试、试运行程序），危险命令会被拦截；不勾选时只写代码、不运行。命令在你的电脑上执行，只在信任的环境中开启。</em></span>
+        </label>
+        <label class="field">投入档位（只限审查轮数和执行步数，不限 token；到了上限交给你决定）
+          <select id="cEffort"></select>
+        </label>
+        <label class="run-toggle" id="webToggle">
+          <input type="checkbox" id="cWeb">
+          <span><b>允许联网</b>（搜索、读网页）<br>
+            <em class="muted" id="webNote">角色需要最新信息（市场、竞品、新闻、技术文档）时可以上网查。通过 MCP 服务器提供。</em></span>
+        </label>
+        <div class="coder-missing muted" id="coderMissing" hidden>没有安装 Coding-agent：工程师只能写代码，不能运行和测试。在项目目录运行 <code>pip install -r requirements.txt</code> 后重启即可。</div>
+        <div class="form-error" id="createError"></div>
+        <button class="btn primary big" type="submit">创建公司</button>
+      </form>
+    </section>
+  </main>
+
+  <!-- ============ 公司工作台 ============ -->
+  <main class="workspace" id="workspace" hidden>
+    <nav class="nav" id="nav">
+      <div class="nav-label">频道</div>
+      <div id="channelList"></div>
+    </nav>
+
+    <section class="chat">
+      <div class="chat-head" id="chatHead"></div>
+      <div class="messages" id="messages"></div>
+      <form class="composer" id="composer">
+        <div class="composer-hint" id="composerHint" hidden></div>
+        <div class="topic-row" id="topicRow" hidden>
+          <span>讨论：</span><select id="topicSel"></select>
+          <span class="topic-tip" id="topicTip"></span>
+        </div>
+        <div class="composer-row">
+          <textarea id="input" rows="1"></textarea>
+          <button class="btn primary" id="sendBtn" type="submit">发送</button>
+          <button class="btn" id="retryBtn" type="button" hidden>立即重试</button>
+          <button class="btn primary" id="resumeRunBtn" type="button" hidden>继续上次的执行</button>
+          <button class="btn danger" id="stopBtn" type="button" hidden>停止</button>
+        </div>
+      </form>
+    </section>
+
+    <div class="reader" id="reader" hidden>
+      <div class="reader-box">
+        <div class="reader-head">
+          <div class="reader-title"><b id="readerTitle"></b><span id="readerPath"></span></div>
+          <button class="btn ghost small" id="readerPanel">在成果面板打开</button>
+          <button class="icon-btn" id="readerClose" aria-label="关闭">✕</button>
+        </div>
+        <div class="reader-body" id="readerBody"></div>
+      </div>
+    </div>
+    <aside class="panel" id="panel">
+      <div class="tabs">
+        <button class="tab active" data-tab="board">任务看板</button>
+        <button class="tab" data-tab="files" id="filesTabBtn">成果 <span class="count" id="fileCount"></span></button>
+        <button class="tab" data-tab="kb">知识库</button>
+      </div>
+      <div class="tab-body" id="boardTab"></div>
+      <div class="tab-body" id="filesTab" hidden>
+        <div class="file-list" id="fileList"></div>
+        <div class="viewer" id="viewer" hidden>
+          <div class="viewer-head"><span id="viewerPath"></span><button class="icon-btn" id="viewerClose">✕</button></div>
+          <div class="viewer-body" id="viewerBody"></div>
+        </div>
+      </div>
+      <div class="tab-body" id="kbTab" hidden>
+        <form class="kb-form" id="kbForm">
+          <input id="kbQuery" placeholder="搜索公司的文档、代码和任务记录" autocomplete="off">
+          <select id="kbMode" title="检索方式">
+            <option value="hybrid">混合</option>
+            <option value="keyword">关键词</option>
+            <option value="vector">按意思</option>
+          </select>
+          <button class="btn primary" type="submit">搜索</button>
+        </form>
+        <div class="kb-status" id="kbStatus">只读搜索：公司文件区和任务记录会自动同步进知识库。</div>
+        <div class="kb-results" id="kbResults"></div>
+      </div>
+    </aside>
+  </main>
+
+  <!-- ============ 角色库 ============ -->
+  <dialog class="dlg" id="libraryDlg">
+    <div class="dlg-head"><b>角色库</b><span class="muted" id="libCount"></span><div class="spacer"></div>
+      <button class="icon-btn" data-close aria-label="关闭">✕</button></div>
+    <div class="dlg-tools">
+      <input id="libSearch" placeholder="搜索角色：名字或擅长的事，例如 小红书、合同、Unity" autocomplete="off">
+      <div class="dept-chips" id="libDepts"></div>
+    </div>
+    <div class="dlg-body lib-list" id="libList"></div>
+    <div class="dlg-foot"><span class="muted" id="libPicked"></span><div class="spacer"></div>
+      <button class="btn primary" data-close>完成</button></div>
+  </dialog>
+
+  <!-- ============ 模型连接 ============ -->
+  <dialog class="dlg" id="modelsDlg">
+    <div class="dlg-head"><b>模型连接</b><div class="spacer"></div>
+      <button class="icon-btn" data-close aria-label="关闭">✕</button></div>
+    <div class="dlg-body">
+      <div class="first-run" id="modelsFirst" hidden>
+        <b>欢迎使用 OPC！先添加一个模型</b><br>
+        下面已经准备好一个 DeepSeek 连接，在「API Key」里填上你的密钥（在 platform.deepseek.com 创建），点「保存」就能开始。
+        用别的服务商的话，把服务商换成「自定义（OpenAI 兼容）」，填它的接口地址和模型名。暂时没有 API Key，可以先用演示模式体验：<code>start.bat --demo</code>
+      </div>
+      <p class="muted">在这里配置一次服务商、接口地址和 API Key，公司和成员只需要选"用哪个模型"。密钥只保存在本机（数据目录的 models.json），不会写进公司的配置。</p>
+      <div id="connList"></div>
+      <button type="button" class="btn ghost small" id="connAdd">＋ 添加连接</button>
+      <label class="field global-default">全局默认模型（新公司默认选它）<select id="globalModel"></select></label>
+      <div class="form-error" id="modelsError"></div>
+    </div>
+    <div class="dlg-foot"><div class="spacer"></div>
+      <button class="btn" data-close>取消</button><button class="btn primary" id="modelsSave">保存</button></div>
+  </dialog>
+
+  <!-- ============ 公司的模型 ============ -->
+  <dialog class="dlg" id="companyModelsDlg">
+    <div class="dlg-head"><b>公司设置</b><div class="spacer"></div>
+      <button class="icon-btn" data-close aria-label="关闭">✕</button></div>
+    <div class="dlg-body">
+      <label class="field">投入档位（只限审查轮数和执行步数，不限 token；到了上限交给你决定）<select id="coEffort"></select></label>
+      <div class="effort-detail muted" id="coEffortDetail"></div>
+      <label class="field">公司默认模型（规划、汇报，以及所有"跟随公司默认"的成员）<select id="coModel"></select></label>
+      <div class="field team-head"><span>各成员</span>
+        <button type="button" class="btn ghost small" id="coFollowAll">全部跟随公司默认</button></div>
+      <div id="coRoles" class="co-roles"></div>
+      <p class="muted">改动对之后开始的任务生效，正在执行的任务不受影响。<button type="button" class="link-btn" id="coManage">⚙ 管理模型连接</button></p>
+      <div class="form-error" id="coError"></div>
+    </div>
+    <div class="dlg-foot"><div class="spacer"></div>
+      <button class="btn" data-close>取消</button><button class="btn primary" id="coSave">保存</button></div>
+  </dialog>
+
+  <!-- ============ 用量 ============ -->
+  <dialog class="dlg" id="usageDlg">
+    <div class="dlg-head"><b>用量明细</b><div class="spacer"></div>
+      <button class="icon-btn" data-close aria-label="关闭">✕</button></div>
+    <div class="dlg-body" id="usageBody"></div>
+  </dialog>
+
+  <div class="toast" id="toast" hidden></div>
+  <script src="/static/app.js"></script>
+</body>
+</html>

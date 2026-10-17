@@ -1,0 +1,128 @@
+{
+ "level": "concise",
+ "name": "v1",
+ "task": "gym",
+ "review_file": "review.concise.v1.md",
+ "seconds": 3457,
+ "usage": {
+  "planner": {
+   "prompt": 9056,
+   "completion": 4282,
+   "cached": 0,
+   "calls": 2
+  },
+  "pm": {
+   "prompt": 760217,
+   "completion": 79787,
+   "cached": 0,
+   "calls": 18
+  },
+  "engineer": {
+   "prompt": 204564,
+   "completion": 74461,
+   "cached": 0,
+   "calls": 11
+  },
+  "designer": {
+   "prompt": 1278328,
+   "completion": 188184,
+   "cached": 0,
+   "calls": 14
+  },
+  "qa": {
+   "prompt": 553376,
+   "completion": 42435,
+   "cached": 0,
+   "calls": 8
+  }
+ },
+ "total": {
+  "prompt": 2805541,
+  "completion": 389149,
+  "cached": 0,
+  "calls": 53
+ },
+ "tasks": [
+  {
+   "title": "产出 MVP 需求文档（PRD）",
+   "assignee": "pm",
+   "reviewer": "engineer",
+   "status": "done",
+   "rounds": 2,
+   "files": [
+    "docs/PRD.md"
+   ],
+   "reviews": [
+    {
+     "round": 1,
+     "verdict": "changes",
+     "issues": [
+      "docs/PRD.md：P0 依赖的运营/管理端能力缺定义。5.1 优先级总览只有 5 个 P0 条目，但 P0 实际运行需要后台能力：①8.1 写明\"教练登录（管理员在后台标记教练身份）\"——教练身份与课程归属如何建立、谁有权限、教练端\"我的课程\"凭什么数据渲染，均无定义；②6.3 与 7④ 写明 P0 阶段用\"运营待通知任务\"做递补，但运营端这个任务是什么、如何操作、如何留痕、是否幂等，无定义；③6.2 写明上线首月违约\"只提醒不冻结（运营可开关）\"——开关在哪、谁能改、改动是否留痕，无定义。8.3 第 9 项只把它列为给设计的页面清单，不构成规格。期望：把这三项补成 P0 功能条目，各自给出用户故事 + Given/When/Then 验收标准（含权限与留痕），或明确写出\"由现有系统/线下流程承担\"并列为 8.4 的前置依赖。（依据：任务要求\"每个 P0 功能的用户故事与验收标准\"，且 7④/7⑤/8.1 的验收标准已直接引用这些能力）",
+      "docs/PRD.md 第 7 节 P0-④ 与 6.3：\"P0 生成运营待通知任务并同样将状态改为'待确认'\"这条分支没有端到端规则，无法验收。缺的是：会员在无订阅消息（P0 无通知能力）时从哪里、以什么方式看到\"待确认 + 剩余时间\"；15 分钟（且不晚于开课前 10 分钟）的计时从哪一刻起算、由谁触发；运营线下通知后会员如何确认、运营如何登记转正（是否走原子占位、是否留痕）；超时未确认由谁判定、如何顺延。期望：二选一并同步改验收标准——(a) 若 T-03 定为人工通知，则补全上述规则，并在会员端\"我的候补\"给出显式待确认入口与倒计时兜底；(b) 若把递补整体推到 P1，则把 P0-④ 明确为\"只排队、不递补\"，删除 P0-④ 中\"待确认/确认参加/顺延\"相关验收标准，避免把 P1 能力写成 P0 承诺。（依据：任务要求\"候补递补后会员的确认时限\"且每个 P0 功能须可验证；本 PRD 9.1 也把\"人工通知无法保证 15 分钟触达\"列为高风险）"
+     ],
+     "summary": "PRD 整体质量高：任务要求的 5 项覆盖点全部到位（目标用户场景、P0/P1/P2 与不做范围、6.1–6.5 业务规则、5 个 P0 的 Given/When/Then、T-01~T-12 待定问题含\"谁回答/阻塞什么\"），且明确声明\"无联网、所有依据为假设并写验证方式\"，未编造数据，8.2 每条取舍都写了\"代价\"，值得保留。但有 1 处必须补齐：P0 的可运行性依赖一组运营/管理端能力（教练身份标记、候补待通知任务、违约提醒/冻结开关），PD 既未把它列为 P0 功能，也没有用户故事与验收标准，而 7④/7⑤/8.1 的验收标准直接引用了这些能力——按现状 P0-④ 在\"人工通知\"分支下无法实现也无法验证。"
+    },
+    {
+     "round": 2,
+     "verdict": "pass",
+     "issues": [],
+     "summary": "v0.2 确实完成了上轮两条必须修改：P0 后台能力已补成 P0-⑥⑦⑧（各带用户故事 + Given/When/Then，含 403 权限校验与留痕），P0-④ 递补分支选了 (a) 并端到端闭环（触发者=服务端、计时起点=名额释放时刻、唯一权威入口=\"我的候补\"、超时由服务端判定顺延），\"运营释放名额\"与第 3 节的矛盾也已修正。可交付。遗留 1 处内部矛盾 + 1 处数值口径不一 + 1 处边界未定义，均为建议级，不退回。"
+    }
+   ]
+  },
+  {
+   "title": "产出交互设计与视觉风格说明",
+   "assignee": "designer",
+   "reviewer": "pm",
+   "status": "done",
+   "rounds": 2,
+   "files": [
+    "docs/design.md",
+    "docs/wireframes.md"
+   ],
+   "reviews": [
+    {
+     "round": 1,
+     "verdict": "changes",
+     "issues": [
+      "docs/design.md 第 3.4 节（P11 失败分支）与 docs/wireframes.md 第 5 节（INVITE_CODE_USED、INVITE_CODE_EXPIRED 两行）：把邀请码失败拆成「该邀请码已使用」「该邀请码已过期（24 小时内有效）」两条独立文案。依据：PRD P0-⑥ 验收标准写的是「同一邀请码被再次使用时被拒并提示『邀请码已使用或已过期』」；docs/tech-design.md §5.3.1 也已定案「INVITE_CODE_INVALID（不存在/已使用/已过期 → 统一文案『邀请码无效或已过期』），不区分以免被枚举」。期望：合并为一条统一文案并说明这是防枚举要求；若设计坚持区分，必须写出与 PM／工程师确认的结论和理由。",
+      "docs/wireframes.md 第 5 节错误码表与 docs/tech-design.md §5.6 的接口约定不一致（同一码两套命名）：设计 SEAT_FULL / tech SESSION_FULL；COURSE_CANCELLED / SESSION_CANCELLED；FROZEN / MEMBER_FROZEN；NO_MEMBERSHIP / NO_ACTIVE_CARD；CHECKIN_NOT_OPEN / SIGN_IN_NOT_IN_WINDOW；ALREADY_IN_WAITLIST / ALREADY_WAITLISTED；ALREADY_BOUND_COACH / OPENID_ALREADY_BOUND）。同时设计自造了后端不存在的 CHECKIN_DUPLICATE / INVITE_CODE_USED / INVITE_CODE_EXPIRED，并遗漏了带界面行为的 DUPLICATE_IN_PROGRESS（同 requestId 并发 → 提示 1 秒后重试）、SEAT_AVAILABLE（还有名额却点候补）、WAITLIST_NOT_PENDING、BOOKING_NOT_ACTIVE、TASK_NOT_ACTIONABLE、STORE_SCOPE_FORBIDDEN / HQ_ONLY_FORBIDDEN。依据：tech-design §5.1「错误码见 5.6，前后端共用同一份常量（后端生成、小程序/后台从同一 TS 包导入，避免文案错配）」；任务要求「输出需让工程师能直接实现」。期望：错误码表以 tech 的常量名作为唯一来源（或明确标注以哪一份为准），并补齐缺失码及其界面动作。",
+      "docs/design.md 第 5.2 节「课程卡片全状态矩阵」（该表标注「工程按此实现，逐行都可验收」）：① 最后一行把「商家已取消」列为课程卡片状态，与 PRD P0-①「Given 课程被取消（数据源状态变更），Then 该课程从课表中移除」矛盾，tech 的 GET /sessions 也直接把 CANCELLED 过滤掉——按此表实现会出现课表展示已取消课程的错误行为；② 12 态未与 tech §5.2.4 的 uiState 十个取值对应（「已预约」在 tech 中不是 uiState，而是由 myBookingId 派生），而 tech §12 已明确要求「uiState 与设计稿的课程卡片状态一一对齐命名」；③ 0.1 节写「能不能点一律以服务端返回的 state 字段为准」，而 tech 约定的字段名是 uiState（另有 serverTime / copyKey / canCancel / cancelPreview）。期望：补一张「设计态 ↔ 服务端字段与取值」映射表，逐行标注该状态出现在哪个页面（「商家已取消」只出现在我的预约/已结束），并把字段名统一为 tech 已约定的名字，避免工程师按设计稿另起一套状态名与字段名。"
+     ],
+     "summary": "覆盖面与细节质量都高于任务要求：6 类必备页面（含消息通知）齐备，5 条流程路径图完整，每页都写了空态/加载态/错误态/倒计时/满员与候补标记，组件规范给出了主辅色+5 组语义色、字号/间距/圆角 token；我按 WCAG 公式抽查了 5 组对比度（#2563EB 5.17、#4B5563 7.56、#6B7280 4.83、#9CA3AF 2.54、#9A3412/#FFEDD5 6.38），数据真实、可用于验收；对 PRD 的 T-03/T-05/T-07 采用了参数化处理而非写死，并把 D-1~D-5 的取舍与降级方案摆在明面上，值得保留。但有 3 处与 PRD 验收标准／tech-design 接口约定相矛盾的地方（邀请码文案拆分、错误码命名两套、课程卡片状态与 uiState 及「已取消课程从课表移除」冲突），会直接导致前端按错契约实现，需返工修正后再交付；这 3 条不涉及推翻整体结构，改动量集中在文档表格与文案层。另附 7 条建议（见下），不阻塞通过。"
+    },
+    {
+     "round": 2,
+     "verdict": "changes",
+     "issues": [
+      "docs/wireframes.md 第 2 节 P17 表格「邀请码」行（及同节交互说明）写「`重新生成` 需二次确认（旧码立即失效）」，与 docs/tech-design.md §5.4.2 `POST /admin/coaches/:id/invite-codes`「每次生成一条新记录（旧码不失效，但建议前台只展示最新的）」直接矛盾。风险：按设计稿实现后，运营会以为旧码已失效，而旧邀请码在 24 小时到期前仍可完成绑定（例如邀请码误发他人后重新生成，旧码仍能绑上该教练档案），且前端/测试会按「旧码应失效」写出无法通过的用例。期望二选一：① 改为「重新生成后页面只展示最新码；旧码在 24 小时内仍可能有效，如需强失效需后端支持（当前不支持）」；② 若确实要求旧码立即失效，请把它显式列入 design.md 第 9 节「需 PM/CEO 决策」或 wireframes 第 8 节待办，标注「需要工程师新增邀请码失效逻辑」，不要在设计稿里静默假设后端行为。依据：tech-design §5.4.2 原文；本文件第 5 节自己的契约声明「code 与字段一律以 tech 为唯一来源」。"
+     ],
+     "summary": "第 2 轮的 3 条必改项我逐字核对，全部真实落地：邀请码失败文案已合并为一条防枚举文案、wireframes §5 错误码表 40 行全部与 tech §5.6/§5.2–5.4 同名且补齐了 DUPLICATE_IN_PROGRESS/SEAT_AVAILABLE/WAITLIST_NOT_PENDING/BOOKING_NOT_ACTIVE/TASK_NOT_ACTIONABLE/STORE_SCOPE_FORBIDDEN/HQ_ONLY_FORBIDDEN 等、课程卡片矩阵已改为「9 个可见 uiState + 2 个派生态」并把 CANCELLED 移出课表、字段名统一为 tech 契约。两份文件的交付质量仍高于任务要求（ASCII 流程、逐字文案清单、参数化 T-xx、D-1~D-5 决策与降级方案、无障碍实测数据），值得保留。仅剩 1 处必须修改：P17「重新生成后旧码立即失效」与 tech §5.4.2「旧码不失效」相矛盾，属于设计稿静默假设了后端不存在的失效行为，需二选一对齐（改动仅一行）。其余 5 条为建议，不阻塞。"
+    }
+   ]
+  },
+  {
+   "title": "产出技术方案（架构、数据模型、接口）",
+   "assignee": "engineer",
+   "reviewer": "",
+   "status": "done",
+   "rounds": 0,
+   "files": [
+    "docs/tech-design.md"
+   ],
+   "reviews": []
+  },
+  {
+   "title": "产出测试计划与测试用例",
+   "assignee": "qa",
+   "reviewer": "",
+   "status": "done",
+   "rounds": 0,
+   "files": [
+    "docs/test-plan.md"
+   ],
+   "reviews": []
+  }
+ ],
+ "escalations": 1
+}
