@@ -289,7 +289,7 @@ $("createForm").onsubmit = async (e) => {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ name: $("cName").value, mission: $("cMission").value, roles, model: companyModel,
                            allow_run: !!home.coder?.available && $("cAllowRun").checked,
-                           web: !!home.web?.available && $("cWeb").checked,
+                           web: !!home.web?.available && $("cWeb").checked, kb: $("cKb").checked,
                            effort: $("cEffort").value || "standard" }),
   });
   const data = await res.json();
@@ -506,6 +506,7 @@ $("companyModelsBtn").onclick = () => {
   $("coEffort").value = C.effort || "standard";
   $("coEffort").dataset.initial = $("coEffort").value;
   $("coEffortDetail").textContent = effortDetail($("coEffort").value);
+  $("coKb").checked = C.kb !== false;
   setSelect($("coModel"), modelOptions(globalLabel()), encodeRef(C.model_ref));
   const box = $("coRoles");
   box.innerHTML = "";
@@ -528,6 +529,11 @@ $("coFollowAll").onclick = () => document.querySelectorAll("#coRoles select").fo
 $("coEffort").onchange = () => { $("coEffortDetail").textContent = effortDetail($("coEffort").value); };
 
 $("coSave").onclick = async () => {
+  if ($("coKb").checked !== (C.kb !== false)) {
+    const r = await fetch("/api/company/kb", { method: "PUT", headers: { "Content-Type": "application/json" },
+                                               body: JSON.stringify({ enabled: $("coKb").checked }) });
+    if (!r.ok) { $("coError").textContent = (await r.json()).detail || "保存失败"; return; }
+  }
   if ($("coEffort").value !== $("coEffort").dataset.initial) {
     const r = await fetch("/api/company/effort", { method: "PUT", headers: { "Content-Type": "application/json" },
                                                    body: JSON.stringify({ effort: $("coEffort").value }) });
@@ -634,7 +640,7 @@ function renderChatHead() {
     const cfg = C.roles.find((r) => r.id === channel);
     head.innerHTML = `<span class="h-icon">${p.icon}</span><div><div class="h-name">${esc(p.name)}</div>
       <div class="h-desc">${esc(p.tagline)} · 模型 ${esc(cfg?.model || "")}${p.can_code && coderAvailable
-        ? (C.allow_run ? '<span class="badge">🤖 编码 agent · 可运行代码</span>' : '<span class="badge">🤖 编码 agent · 不运行代码</span>') : ""}${C.web ? '<span class="badge">🌐 可联网</span>' : ""}</div>
+        ? (C.allow_run ? '<span class="badge">🤖 编码 agent · 可运行代码</span>' : '<span class="badge">🤖 编码 agent · 不运行代码</span>') : ""}${C.web ? '<span class="badge">🌐 可联网</span>' : ""}${C.kb !== false ? '<span class="badge">📚 知识库</span>' : ""}</div>
       <div class="h-now" id="hNow"></div></div>`;
     updateNow();
   }
@@ -769,6 +775,12 @@ function chipsFor(tools, filesWritten) {
 function toolChip(t) {
   const via = t.via === "coder" ? "🤖 " : "";
   if (t.name === "code_agent") return el("span", "chip agent", "🤖 交给编码 agent");
+  if (t.name === "kb_search") {
+    const chip = el("span", "chip kb" + (t.ok === false ? " bad" : ""),
+                    `${via}📚 检索：${esc(t.query || "")}${t.ok === false ? "" : `（${t.hits ?? 0} 条）`}`);
+    chip.title = (t.sources || []).join("\n") || "没有找到相关内容";
+    return chip;
+  }
   if (t.name === "run_command") {
     const ok = t.exit === 0;
     const chip = el("span", "chip cmd " + (ok ? "ok" : "bad"), `${via}▶ ${esc(t.command)} ${ok ? "✓" : `✗ ${t.exit ?? ""}`}`);
@@ -830,6 +842,11 @@ function renderMessage(m) {
     md.classList.add("card", "report-card");
     md.insertAdjacentHTML("afterbegin", `<p><strong>${m.quick ? "📊 结果" : "📊 执行汇报"}</strong></p>`);
     md.appendChild(reportExtras(m));
+    if (m.directive_id) {
+      const btn = el("button", "btn small ghost trace-btn", "🔍 执行链路（每一步的用时和 token）");
+      btn.onclick = () => openTrace(`key=${encodeURIComponent("directive:" + m.directive_id)}`);
+      md.appendChild(btn);
+    }
   }
   else if (m.kind === "error") md.classList.add("card", "error-card");
   else md.classList.add("card");
@@ -1106,7 +1123,9 @@ function renderPlan(m) {
   const md = node.querySelector(".md");
   md.classList.add("card", "plan-card");
   const tasks = (m.tasks || []).map((id) => S.tasks[id]).filter(Boolean);
-  md.innerHTML = `<div class="plan-title">${m.quick ? "⚡ 小任务 · 直接开始" : "执行计划"}</div>${markdown(m.text)}<div class="plan-tasks"></div>`;
+  const recalled = (m.recalled || []).length
+    ? `<details class="pt-req plan-recall"><summary>📚 规划时参考了知识库里 ${m.recalled.length} 条相关记录</summary><ul>${m.recalled.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></details>` : "";
+  md.innerHTML = `<div class="plan-title">${m.quick ? "⚡ 小任务 · 直接开始" : "执行计划"}</div>${markdown(m.text)}${recalled}<div class="plan-tasks"></div>`;
   const list = md.querySelector(".plan-tasks");
   for (const t of tasks) {
     const p = presets[t.assignee] || {};
@@ -1421,6 +1440,82 @@ function directiveText(did) {
   return m ? m.text : did;
 }
 
+// ---------- 执行链路：一条指令从规划到汇报的每一步（多久、多少 token、哪里出错）
+
+const TRACE_NAMES = { "gen_ai.request.model": "模型", "gen_ai.usage.input_tokens": "输入 token", "gen_ai.usage.output_tokens": "输出 token",
+  "gen_ai.usage.cached_tokens": "缓存命中 token", "opc.ttft_ms": "首字延迟（毫秒）", "opc.retries": "重试次数", "opc.tool_calls": "调用的工具",
+  "gen_ai.tool.name": "工具", "opc.role": "角色", "opc.task_status": "结束时的状态", "opc.hits": "检索到", "opc.sources": "出处",
+  "opc.input_preview": "输入（最后一条消息开头）", "opc.output_preview": "输出开头", "opc.args_preview": "参数", "error": "出错",
+  "opc.directive": "指令", "opc.query": "检索内容", "opc.path": "文件", "opc.result_chars": "结果字数" };
+
+async function openTrace(query, title) {
+  const res = await fetch(`/api/trace?${query}`);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) return toast(data.detail || "没有这条链路");
+  const spans = data.spans, byId = Object.fromEntries(spans.map((s) => [s.span_id, { ...s, kids: [] }]));
+  let root = null;
+  for (const s of Object.values(byId)) (s.parent_id && byId[s.parent_id] ? byId[s.parent_id].kids.push(s) : (root = root || s));
+  const now = Date.now() / 1000, t0 = Math.min(...spans.map((s) => s.start));
+  const t1 = Math.max(...spans.map((s) => s.end || now)), total = Math.max(t1 - t0, 0.001);
+  const llm = spans.filter((s) => s.kind === "llm"), tools = spans.filter((s) => s.kind === "tool");
+  const sum = (k) => llm.reduce((a, s) => a + (s.attrs[k] || 0), 0);
+  const slowest = llm.reduce((a, s) => ((s.end || now) - s.start > ((a?.end || now) - (a?.start || now)) ? s : a), null);
+  const errors = spans.filter((s) => s.status === "error");
+  $("traceTitle").textContent = title || root?.name || "执行链路";
+  $("traceSummary").innerHTML = `<div><b>${fmtSec(total)}</b><span>总用时</span></div>
+    <div><b>${llm.length}</b><span>次模型调用</span></div><div><b>${tools.length}</b><span>次工具调用</span></div>
+    <div><b>${fmtTok(sum("gen_ai.usage.input_tokens"))}</b><span>输入（命中缓存 ${fmtTok(sum("gen_ai.usage.cached_tokens"))}）</span></div>
+    <div><b>${fmtTok(sum("gen_ai.usage.output_tokens"))}</b><span>输出</span></div>
+    <div><b class="${errors.length ? "bad" : ""}">${errors.length}</b><span>出错的步骤</span></div>
+    ${slowest ? `<div class="wide"><span>最慢的一次模型调用：${fmtSec((slowest.end || now) - slowest.start)}（${esc(parentName(slowest, byId))}）</span></div>` : ""}`;
+  const rows = $("traceRows");
+  rows.innerHTML = "";
+  const walk = (s, depth) => {
+    const dur = (s.end || now) - s.start;
+    const row = el("div", `trace-row tk-${s.kind}${s.status === "error" ? " err" : ""}${s.end ? "" : " running"}`);
+    const tok = s.kind === "llm" && s.attrs["gen_ai.usage.input_tokens"] != null
+      ? ` · ${fmtTok(s.attrs["gen_ai.usage.input_tokens"])} → ${fmtTok(s.attrs["gen_ai.usage.output_tokens"] || 0)}` : "";
+    row.innerHTML = `<div class="tr-name" style="padding-left:${depth * 14}px" title="${esc(s.name)}">${esc(s.name)}</div>
+      <div class="tr-track"><div class="tr-bar" style="left:${((s.start - t0) / total) * 100}%;width:${Math.max((dur / total) * 100, 0.4)}%"></div></div>
+      <div class="tr-dur">${fmtSec(dur)}${tok}</div>`;
+    row.onclick = () => {
+      rows.querySelectorAll(".sel").forEach((x) => x.classList.remove("sel"));
+      row.classList.add("sel");
+      const lines = [`${s.name}  ·  ${fmtSec(dur)}${s.end ? "" : "（进行中）"}  ·  ${s.status}`];
+      for (const [k, v] of Object.entries(s.attrs)) {
+        if (k === "key") continue;
+        lines.push(`${TRACE_NAMES[k] || k}：${typeof v === "string" ? v : JSON.stringify(v, null, 0)}`);
+      }
+      $("traceDetail").textContent = lines.join("\n");
+    };
+    rows.appendChild(row);
+    s.kids.sort((a, b) => a.start - b.start).forEach((k) => walk(k, depth + 1));
+  };
+  if (root) walk(root, 0);
+  $("traceDetail").textContent = "点一行看详情：模型、token、首字延迟、输入输出的开头、出错原因……";
+  $("traceDlg").showModal();
+}
+
+function parentName(s, byId) {
+  let p = byId[s.parent_id];
+  while (p && p.kind !== "agent" && p.kind !== "chain" && p.parent_id) p = byId[p.parent_id];
+  return p ? p.name : s.name;
+}
+
+function fmtSec(sec) {
+  return sec < 1 ? `${Math.round(sec * 1000)} 毫秒` : sec < 60 ? `${sec.toFixed(1)} 秒` : `${Math.floor(sec / 60)} 分 ${Math.round(sec % 60)} 秒`;
+}
+
+async function traceList() {
+  const res = await fetch("/api/traces?limit=20");
+  if (!res.ok) return "";
+  const { traces } = await res.json();
+  if (!traces.length) return "";
+  return `<table class="usage-table trace-list"><tr><th>执行链路（最近的在前，点开看每一步）</th><th>用时</th><th>模型调用</th><th>出错</th></tr>${traces.map((t) =>
+    `<tr data-trace="${esc(t.trace_id)}"><td>${esc(t.name)}</td><td>${fmtSec((t.end || t.last || t.start) - t.start)}${t.end ? "" : "（进行中）"}</td>
+     <td>${t.llm_calls}</td><td>${t.errors || ""}</td></tr>`).join("")}</table>`;
+}
+
 function openUsage() {
   const body = $("usageBody");
   const total = sumUsage(S.usage);
@@ -1449,6 +1544,13 @@ function openUsage() {
     <b>投入档位</b>：${eff ? `${esc(eff.name)}——${esc(eff.desc)}` : "标准"}。档位只限审查轮数和执行步数，不限 token：按 token 封顶会做到一半被截断，返工反而更费。可以在"⚙ 设置"里改。</div>`;
   body.innerHTML = html;
   $("usageDlg").showModal();
+  traceList().then((t) => {
+    if (!t) return;
+    body.insertAdjacentHTML("beforeend", t);
+    body.querySelectorAll("[data-trace]").forEach((tr) => {
+      tr.onclick = () => openTrace(`id=${encodeURIComponent(tr.dataset.trace)}`, tr.querySelector("td").textContent);
+    });
+  });
 }
 $("usage").onclick = () => { if (C) openUsage(); };
 
@@ -1623,12 +1725,14 @@ function selectTab(name) {
   $("boardTab").hidden = name !== "board";
   $("filesTab").hidden = name !== "files";
   $("kbTab").hidden = name !== "kb";
-  if (name === "kb") $("kbQuery").focus();
+  if (name === "kb") { $("kbQuery").focus(); loadLibrary(); }
 }
 
 // ---------------------------------------------------------------- 知识库（只读搜索）
 
 const KB_KIND = { markdown: "文档", function: "函数", class: "类", code: "代码", text: "文本", task: "任务记录" };
+const KB_CATEGORY = { task: "任务记录", directive: "指令结论", lib: "公司资料", me: "个人资料" };
+const kbCategory = (source) => { const h = source.split(":")[0]; return source.includes(":") && KB_CATEGORY[h] ? h : "file"; };
 
 async function kbSearch() {
   const q = $("kbQuery").value.trim();
@@ -1640,18 +1744,22 @@ async function kbSearch() {
   const data = await res.json();
   if (!res.ok) { status.textContent = data.detail || "检索失败"; return; }
   const s = data.stats;
-  status.textContent = `知识库：${s.chunks} 块（文件 ${s.sources.file || 0} 个，任务记录 ${s.sources.task || 0} 条）· `
+  status.textContent = `知识库：${s.chunks} 块（文件 ${s.sources.file || 0} 个，任务记录 ${s.sources.task || 0} 条，`
+    + `指令结论 ${s.sources.directive || 0} 条，资料 ${(s.sources.lib || 0) + (s.sources.me || 0)} 份）· `
     + (s.embedder ? `向量检索已启用（${s.vectors} 块）` : "未启用向量检索，只用关键词")
-    + (s.vector_error ? ` · 向量检索出错：${s.vector_error}` : "");
+    + (s.vector_error ? ` · 向量检索出错：${s.vector_error}` : "")
+    + (s.reranker && $("kbMode").value === "hybrid" ? " · 已重排序" : "") + (s.rerank_error ? ` · 重排序出错：${s.rerank_error}` : "");
   if (!data.results.length) { list.appendChild(el("div", "board-empty", "没有找到相关内容。")); return; }
   for (const r of data.results) {
-    const isFile = !r.source.startsWith("task:");
+    const cat = kbCategory(r.source), isFile = cat === "file", isLib = cat === "lib" || cat === "me";
     const item = el("div", "kb-item");
-    const ranks = [r.keyword_rank && `关键词 #${r.keyword_rank}`, r.vector_rank && `向量 #${r.vector_rank}`].filter(Boolean).join(" · ");
-    const kind = isFile ? (KB_KIND[r.kind] || r.kind) : "任务记录";
-    item.innerHTML = `<div class="kb-head"><span class="kb-kind">${esc(kind)}</span>
-      <span class="kb-src" title="${esc(r.source)}">${esc(isFile ? `${r.source}:${r.start}-${r.end}` : r.title)}</span></div>
-      ${isFile && r.title ? `<div class="kb-title">${esc(r.title)}</div>` : ""}
+    const ranks = [r.keyword_rank && `关键词 #${r.keyword_rank}`, r.vector_rank && `向量 #${r.vector_rank}`,
+                   r.rerank_score != null && `重排得分 ${r.rerank_score}`].filter(Boolean).join(" · ");
+    const kind = isFile ? (KB_KIND[r.kind] || r.kind) : KB_CATEGORY[cat];
+    const src = isFile ? `${r.source}:${r.start}-${r.end}` : isLib ? r.source.slice(r.source.indexOf(":") + 1) : r.title;
+    item.innerHTML = `<div class="kb-head"><span class="kb-kind${isLib ? " lib" : ""}">${esc(kind)}</span>
+      <span class="kb-src" title="${esc(r.source)}">${esc(src)}</span></div>
+      ${(isFile || isLib) && r.title ? `<div class="kb-title">${esc(r.title)}</div>` : ""}
       <pre class="kb-snippet"></pre><div class="kb-meta">${esc(ranks)}${isFile ? " · 点击打开文件" : " · 点击展开全文"}</div>`;
     const pre = item.querySelector(".kb-snippet");
     pre.textContent = r.snippet;
@@ -1664,6 +1772,72 @@ async function kbSearch() {
 }
 
 $("kbForm").onsubmit = (e) => { e.preventDefault(); kbSearch(); };
+
+// ---------- 资料库：公司资料 / 个人资料（上传后立即解析、切块、入库）
+
+let libScope = "company";
+
+async function loadLibrary() {
+  if (!C) return;
+  const res = await fetch("/api/library");
+  if (!res.ok) return;
+  const data = await res.json();
+  renderLibrary("company", data.company || []);
+  renderLibrary("personal", data.personal || []);
+  const n = (data.company || []).length + (data.personal || []).length;
+  $("libCount").textContent = n ? `${n} 份` : "（还没有资料，可以上传）";
+}
+
+function renderLibrary(scope, items) {
+  const box = $(scope === "company" ? "libCompany" : "libPersonal");
+  box.innerHTML = items.length ? "" : `<div class="lib-empty muted">还没有${scope === "company" ? "公司" : "个人"}资料</div>`;
+  for (const it of items) {
+    const row = el("div", "lib-item" + (it.error ? " warn" : ""));
+    row.innerHTML = `<span class="lib-name"></span><span class="lib-meta muted"></span><button class="icon-btn" title="删除">✕</button>`;
+    row.querySelector(".lib-name").textContent = it.name;
+    row.querySelector(".lib-meta").textContent = it.error ? `⚠ ${it.error}` : `${fmtSize(it.size)} · ${it.chunks} 块`;
+    row.querySelector("button").onclick = async () => {
+      if (!confirm(`删除资料「${it.name}」？角色之后就检索不到它了。`)) return;
+      await fetch(`/api/library/${scope}?name=${encodeURIComponent(it.name)}`, { method: "DELETE" });
+      loadLibrary();
+    };
+    box.appendChild(row);
+  }
+}
+
+function fmtSize(n) {
+  return n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : n >= 1024 ? `${Math.round(n / 1024)} KB` : `${n} 字节`;
+}
+
+async function uploadLibrary(scope, files) {
+  const box = $(scope === "company" ? "libCompany" : "libPersonal");
+  for (const f of files) {
+    const row = el("div", "lib-item busy", `<span class="lib-name">${esc(f.name)}</span><span class="lib-meta muted">入库中…（解析、切块、生成向量）</span>`);
+    box.prepend(row);
+    const res = await fetch(`/api/library/${scope}?name=${encodeURIComponent(f.name)}`, { method: "POST", body: f });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      row.className = "lib-item warn";
+      row.querySelector(".lib-meta").textContent = `⚠ ${data.detail || "上传失败"}`;
+      await new Promise((r) => setTimeout(r, 2500));
+    }
+  }
+  loadLibrary();
+}
+
+document.querySelectorAll("[data-up]").forEach((b) => {
+  b.onclick = () => { libScope = b.dataset.up; $("libFile").value = ""; $("libFile").click(); };
+});
+$("libFile").onchange = () => { if ($("libFile").files.length) uploadLibrary(libScope, [...$("libFile").files]); };
+document.querySelectorAll(".lib-sec").forEach((sec) => {
+  sec.ondragover = (e) => { e.preventDefault(); sec.classList.add("drop"); };
+  sec.ondragleave = () => sec.classList.remove("drop");
+  sec.ondrop = (e) => {
+    e.preventDefault();
+    sec.classList.remove("drop");
+    if (e.dataTransfer.files.length) uploadLibrary(sec.dataset.scope, [...e.dataTransfer.files]);
+  };
+});
 
 document.querySelectorAll(".tab").forEach((t) => { t.onclick = () => selectTab(t.dataset.tab); });
 $("viewerClose").onclick = () => { openFile = null; $("viewer").hidden = true; renderFiles(); };

@@ -171,3 +171,11 @@ def test_summary_and_rule_text():
         "name": "x__research", "ok": True, "web": True, "question": "竞品有哪些"}
     assert web_tools.summary("x__fetch", {"url": "https://a.example", "max_length": 5}, False)["url"] == "https://a.example"
     assert "优先用" not in web_tools.rule_text(["a__web_search", "a__fetch"])
+
+
+def test_missing_cwd_is_explained():
+    """配置里写了不存在的工作目录：说清楚原因；默认的数据目录不存在时自己建（新机器上第一次运行）。"""
+    write_config({"fake": fake(), "lost": fake(cwd="/definitely/not/here/xyz")})
+    ready_manager()
+    states = {s["name"]: s for s in web_tools.status()["servers"]}
+    assert states["fake"]["state"] == "ok" and "工作目录不存在" in states["lost"]["error"]

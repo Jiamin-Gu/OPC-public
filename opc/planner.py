@@ -81,7 +81,12 @@ def _roles_text(company: Company) -> str:
     return "\n".join(lines)
 
 
-def _context(company: Company, directive: str, feedback: str, recent_tasks: list[dict]) -> str:
+MEMORY_NOTE = ("# 公司知识库里和这条指令相关的记录（自动检索，供参考）\n"
+               "以前定下的口径、CEO 的裁决和 CEO 提供的资料：新计划要和它们保持一致，除非 CEO 这次明确改了；"
+               "无关的忽略。用到的要点写进对应任务的说明（detail）里并注明出处，执行的同事才看得到。")
+
+
+def _context(company: Company, directive: str, feedback: str, recent_tasks: list[dict], memory: str = "") -> str:
     files = company.list_files()
     parts = [f"CEO 的指令：{directive}", "",
              "共享文件区已有的文件：" + ("、".join(f["path"] for f in files) if files else "（空）")]
@@ -89,6 +94,8 @@ def _context(company: Company, directive: str, feedback: str, recent_tasks: list
         parts += ["", "之前完成的任务（供参考）："] + [
             f"- [{ROLES.get(t['assignee']).name if t['assignee'] in ROLES else t['assignee']}] {t['title']}（{t['status']}）"
             for t in recent_tasks[-10:]]
+    if memory:
+        parts += ["", MEMORY_NOTE, "", memory]
     if feedback:
         parts += ["", f"CEO 对上一版计划的修改意见（必须遵守）：{feedback}"]
     return "\n".join(parts)
@@ -197,8 +204,10 @@ def require_review_for_upstream(tasks: list[dict]) -> None:
             t["reviewer"] = reviewer
 
 
-def make_plan(company: Company, directive: str, feedback: str, recent_tasks: list[dict], on_delta) -> tuple:
-    """返回 (summary, tasks, usage)。模型输出不合规时把错误告诉它，再试一次。"""
+def make_plan(company: Company, directive: str, feedback: str, recent_tasks: list[dict], on_delta,
+              memory: str = "") -> tuple:
+    """返回 (summary, tasks, usage)。模型输出不合规时把错误告诉它，再试一次。
+    memory：从公司知识库自动召回的相关记录（见 knowledge/service.recall）。"""
     llm = company.llm_for(None)
     messages = [
         {"role": "system", "content": PLAN_PROMPT.format(name=company.meta["name"], mission=company.meta.get("mission") or "（未设定）",
@@ -207,7 +216,7 @@ def make_plan(company: Company, directive: str, feedback: str, recent_tasks: lis
                                                         doc_hard_limit=DOC_HARD_LIMIT,
                                                         review_policy=effort.REVIEW_POLICY[effort.limits(company.effort)["review_policy"]],
                                                         templates=task_formats.catalog(company.role_ids))},
-        {"role": "user", "content": _context(company, directive, feedback, recent_tasks)},
+        {"role": "user", "content": _context(company, directive, feedback, recent_tasks, memory)},
     ]
     usage = {"prompt": 0, "completion": 0, "cached": 0, "calls": 0}
     last_error = None

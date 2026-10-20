@@ -56,9 +56,14 @@ class StdioTransport:
                **{k: expand(str(v)) for k, v in spec.get("env", {}).items()}}
         self.name, self.on_message = name, on_message
         self.stderr: deque[str] = deque(maxlen=50)  # 最近的错误输出，出问题时给用户看
+        cwd = Path(expand(str(spec["cwd"]))) if spec.get("cwd") else Path(root)
+        if not spec.get("cwd"):  # 默认在数据目录里启动：新装的电脑上它可能还不存在（v0.21 CI 第一次运行时发现）
+            cwd.mkdir(parents=True, exist_ok=True)
+        elif not cwd.is_dir():
+            raise MCPError(f"启动失败（{spec['command']}）：配置的工作目录不存在：{cwd}")
         try:
             self.proc = subprocess.Popen(
-                [command, *[expand(str(a)) for a in spec.get("args", [])]], cwd=spec.get("cwd") or root, env=env,
+                [command, *[expand(str(a)) for a in spec.get("args", [])]], cwd=cwd, env=env,
                 stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                 **({"creationflags": subprocess.CREATE_NO_WINDOW} if os.name == "nt" else {}))
         except OSError as e:

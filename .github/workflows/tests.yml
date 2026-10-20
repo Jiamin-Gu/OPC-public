@@ -1,0 +1,38 @@
+# 每次 push 和 PR 自动跑测试：测试用脚本化的假模型，不调用真实 API，不需要任何密钥。
+# 需要本地向量模型（约 95 MB）的检索评测会自动跳过。
+name: tests
+
+on:
+  push:
+    branches: ["**"]   # 只看分支：推送版本标签时由 release.yml 调用这里，不重复跑
+  pull_request:
+  workflow_call:       # 发布流水线（release.yml）先调用这里跑完全部测试
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ["3.10", "3.12"]
+        exclude:
+          - os: windows-latest
+            python: "3.10"
+    runs-on: ${{ matrix.os }}
+    env:
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+      - name: 安装依赖
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pypdf python-docx
+      - name: 安装编码 agent（可选依赖，装上才会跑相关测试）
+        run: pip install -r requirements-coder.txt
+      - name: 运行测试
+        run: python -m pytest -q

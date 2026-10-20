@@ -156,3 +156,13 @@ def test_retry_only_for_failed_tasks():
     keys = {"T1": {"id": "a", "status": "failed"}, "T2": {"id": "b", "status": "done"}}
     out = parse({"change": True, "orders": [{"task": "T1", "kind": "retry"}, {"task": "T2", "kind": "retry"}]}, keys)
     assert out["orders"] == [{"kind": "retry", "task_id": "a", "feedback": ""}]
+
+
+def test_new_directive_after_finished_one_is_not_swallowed(hub):
+    """上一条指令做完后再下新指令：调度助手判断不是改动，要照常开始规划。
+    以前调度助手先把自己的用量作为事件交给引擎，引擎一时"在忙"，新指令被当成插话吞掉了（v0.21 修复）。"""
+    hub.world.plans = [{"summary": "做报表", "tasks": [
+        {"key": "r", "title": "报表需求", "detail": "docs/report.md", "assignee": "pm", "depends_on": []}]}]
+    hub.send("再做一个月度报表功能", "all")
+    wait(lambda: sum(m["kind"] == "plan" for m in hub.log.read("all")) == 2)
+    assert not any(m["kind"] == "interject" for m in hub.log.read("all"))

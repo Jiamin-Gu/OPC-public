@@ -38,6 +38,8 @@ from .changes import (FINISHED_STATUSES, apply_change, cancel_unfinished, dispat
 from .company import Company
 from .config import MAX_REVIEW_ROUNDS
 from .inbox import format_notes
+from . import tracing
+from .knowledge import service as kb_service
 from .messages import MessageLog
 from .roles import ROLES
 from .state import CompanyState, Task, add_usage, new_id, new_message, sum_usage
@@ -211,6 +213,15 @@ def waive(reviews: list[dict]) -> list[dict]:
 
 # ---------------------------------------------------------------- 规划
 
+def _trace_root(company, directive: dict):
+    """这条指令的链路（根步骤）。记录失败时返回 None，不影响调度。"""
+    try:
+        return tracing.root(company, f"directive:{directive['id']}", f"指令：{directive['text'][:40]}",
+                            **{"opc.directive": tracing.preview(directive["text"], 500)})
+    except Exception:
+        return None
+
+
 def plan_node(state: CompanyState, runtime: Runtime[Ctx]) -> Command:
     ctx, emit = runtime.context, get_stream_writer()
     d = state["directive"]
@@ -218,13 +229,29 @@ def plan_node(state: CompanyState, runtime: Runtime[Ctx]) -> Command:
     emit({"type": "status", "role": "planner", "status": "working"})
     previous = [t for t in state.get("tasks", {}).values() if t["directive_id"] != d["id"]]
     cancel_check = _cancellable(ctx, _delta_emitter(emit, msg_id, ALL, "planner", kinds=("reasoning",)))
-    try:
-        summary, specs, usage = planner.make_plan(ctx.company, d["text"], state.get("feedback", ""), previous, cancel_check)
-    except planner.PlanError as e:
-        _post(runtime, ALL, new_message("system", "error", str(e), id=msg_id))
-        return Command(goto=END, update={"plan_summary": "", "feedback": ""})
-    finally:
-        emit({"type": "status", "role": "planner", "status": "idle"})
+    memory, recalled = "", []
+    root = _trace_root(ctx.company, d)
+    with tracing.use(root), tracing.span("规划", "chain", **{"opc.revision": bool(state.get("feedback"))}) as plan_span:
+        if ctx.company.kb:  # 长期记忆：用指令原文检索以前的结论、任务记录和资料（这条指令自己的不算）
+            with tracing.span("知识库召回", "retrieval") as rs:
+                records = {"tasks": dict(state.get("tasks") or {}),
+                           "channels": {"all": MessageLog(runtime.store, ctx.company.id).read(ALL)}}
+                memory, recalled = kb_service.recall(
+                    ctx.company, d["text"], records,
+                    exclude=lambda s: s == f"directive:{d['id']}" or s.startswith(f"task:{d['id']}-"))
+                rs.set(**{"opc.hits": len(recalled), "opc.sources": recalled or None})
+        try:
+            summary, specs, usage = planner.make_plan(ctx.company, d["text"], state.get("feedback", ""), previous,
+                                                      cancel_check, memory=memory)
+        except planner.PlanError as e:
+            _post(runtime, ALL, new_message("system", "error", str(e), id=msg_id))
+            plan_span.finish(error=str(e))
+            if root:
+                root.finish(error=str(e))
+            return Command(goto=END, update={"plan_summary": "", "feedback": ""})
+        finally:
+            emit({"type": "status", "role": "planner", "status": "idle"})
+        plan_span.set(**{"opc.tasks": len(specs)})
     # 每一版计划有独立的标识：CEO 提修改意见重新规划时，新任务不会覆盖旧计划里已取消的任务
     plan_tag = new_id()[:4]
     ids = {s["key"]: f"{d['id']}-{plan_tag}-{s['key']}" for s in specs}
@@ -236,7 +263,7 @@ def plan_node(state: CompanyState, runtime: Runtime[Ctx]) -> Command:
                                  acceptance=s.get("acceptance") or [], quick=bool(s.get("quick"))) for s in specs}
     quick = all(t["quick"] for t in tasks.values())
     _post(runtime, ALL, new_message("planner", "plan", summary, id=msg_id, tasks=list(tasks), directive_id=d["id"],
-                                    quick=quick))
+                                    quick=quick, recalled=recalled))
     update = {"tasks": tasks, "plan_summary": summary, "feedback": "", "usage": {"planner": usage},
               "directive_usage": {d["id"]: {"planner": usage}}}
     if ctx.auto_approve or quick:  # 小任务不等审批：直接开始，CEO 随时可以停止
@@ -279,21 +306,29 @@ def report_node(state: CompanyState, runtime: Runtime[Ctx]) -> dict:
     skipped = {t["id"]: {**t, "status": "skipped", "result": "依赖的任务没有完成，已跳过"}
                for t in tasks if t["status"] == "pending"}
     final = [skipped.get(t["id"], t) for t in tasks if t["status"] != "cancelled"]
+    root = _trace_root(ctx.company, state["directive"])
     if len(final) == 1 and final[0].get("quick") and final[0]["status"] == "done":
         # 小任务做完了：负责人的汇报就是结果，不再让汇报助手转述一遍（省一次调用，也不丢细节）
         _post(runtime, ALL, new_message("reporter", "report", final[0].get("result") or "（没有汇报）",
                                         directive_id=state["directive"]["id"], quick=True))
+        if root:
+            root.set(**{"opc.tasks": len(final)}).finish()
         return {"tasks": skipped}
     notes = [m for m in MessageLog(runtime.store, ctx.company.id).read(ALL)
              if m.get("kind") == "interject" and m.get("directive_id") == state["directive"]["id"]]
     msg_id = new_id()
     emit({"type": "status", "role": "reporter", "status": "working"})
     try:
-        text, usage = planner.make_report(ctx.company, state["directive"]["text"], final,
-                                          _cancellable(ctx, _delta_emitter(emit, msg_id, ALL, "reporter")),
-                                          notes=format_notes(notes))
+        with tracing.use(root), tracing.span("汇报", "chain"):
+            text, usage = planner.make_report(ctx.company, state["directive"]["text"], final,
+                                              _cancellable(ctx, _delta_emitter(emit, msg_id, ALL, "reporter")),
+                                              notes=format_notes(notes))
     finally:
         emit({"type": "status", "role": "reporter", "status": "idle"})
+    if root:
+        statuses = [t["status"] for t in final]
+        root.set(**{"opc.tasks": len(final), "opc.done": statuses.count("done"),
+                    "opc.failed": statuses.count("failed") + statuses.count("skipped")}).finish()
     _post(runtime, ALL, new_message("reporter", "report", text, id=msg_id, directive_id=state["directive"]["id"]))
     return {"tasks": skipped, "usage": {"planner": usage}, "directive_usage": {state["directive"]["id"]: {"planner": usage}}}
 

@@ -203,3 +203,70 @@ def test_retrieval_quality_on_real_output(tmp_path):
     keyword, vector, hybrid = (evaluate(kb, m, 5) for m in ("keyword", "vector", "hybrid"))
     assert hybrid["recall"] >= 0.9 and hybrid["recall"] >= max(keyword["recall"], vector["recall"])
     assert hybrid["mrr"] >= max(keyword["mrr"], vector["mrr"])
+
+
+def test_retrieval_quality_on_mixed_knowledge_base(tmp_path):
+    """v0.21 的混合知识库：两个项目的文件 + 一次真实运行的任务记录和指令结论 + 一份 Word 公司资料，38 题。
+    记录在这里：全部 38 题 recall@5 关键词 0.84 / 向量 0.68 / 混合 0.95，MRR 0.69 / 0.56 / 0.74（见 docs/design.md 决策 24）。"""
+    import kb_queries as Q
+    from opc.knowledge.company import directive_documents
+    kb = KnowledgeBase(tmp_path / "kb", embedder=real_embedder())
+    root = EXAMPLE.parent.parent
+    lib = tmp_path / "lib"
+    lib.mkdir()
+    Q.write_library_docx(lib / Q.LIBRARY_NAME)
+    kb.sync_files(EXAMPLE)
+    kb.sync_files(root / "real-pilot-v0.12" / "files", prefix="gym/", kind="gym")
+    state = Q.gym_state(root / "real-pilot-v0.12")
+    kb.sync_items("task:", task_documents(state))
+    kb.sync_items("directive:", directive_documents(state))
+    kb.sync_files(lib, prefix="lib:", kind="lib", documents=True)
+    queries = Q.QUERIES + Q.RECORD_QUERIES + Q.LIBRARY_QUERIES
+    keyword, vector, hybrid = (Q.evaluate(kb, m, 5, queries) for m in ("keyword", "vector", "hybrid"))
+    assert hybrid["recall"] >= 0.9 and hybrid["recall"] >= max(keyword["recall"], vector["recall"])
+    assert hybrid["mrr"] >= max(keyword["mrr"], vector["mrr"])
+    assert Q.evaluate(kb, "hybrid", 5, Q.LIBRARY_QUERIES)["recall"] >= 0.85  # 资料的小节合并后标题不能丢（v0.21 修过）
+
+
+def test_rerank_reorders_candidates_only_when_asked(tmp_path, monkeypatch):
+    """重排序：从混合检索的候选里重新排；默认不重排（给模型的检索），出错时退回原来的顺序；auto 只用已经下载的模型。"""
+    from opc.knowledge import rerank
+
+    class FakeReranker(rerank.Reranker):
+        name = "fake"
+
+        def __init__(self, broken=False):
+            self.broken, self.calls = broken, 0
+
+        def scores(self, query, texts):
+            self.calls += 1
+            if self.broken:
+                raise RuntimeError("模型坏了")
+            return [10.0 if "到账" in t else 0.0 for t in texts]
+
+    root = tmp_path / "files"
+    root.mkdir()
+    (root / "a.md").write_text("# 退款\n\n退款申请提交后由客服审核。\n", encoding="utf-8")
+    (root / "b.md").write_text("# 到账时间\n\n审核通过后 3 个工作日到账，退款原路返回。\n", encoding="utf-8")
+    fake = FakeReranker()
+    kb = KnowledgeBase(tmp_path / "kb", embedder=None, reranker=fake)
+    kb.sync_files(root)
+    plain = kb.search("退款", 2)
+    assert fake.calls == 0 and "rerank_score" not in plain[0]                     # 默认不重排
+    ranked = kb.search("退款", 2, rerank=True)
+    assert ranked[0]["source"] == "b.md" and ranked[0]["rerank_score"] == 10.0 and kb.stats()["reranker"] == "fake"
+    broken = KnowledgeBase(tmp_path / "kb2", embedder=None, reranker=FakeReranker(broken=True))
+    broken.sync_files(root)
+    assert [r["source"] for r in broken.search("退款", 2, rerank=True)] == [r["source"] for r in plain]
+    assert "模型坏了" in broken.stats()["rerank_error"]
+
+    import sys
+    import types
+    monkeypatch.setitem(sys.modules, "fastembed", types.ModuleType("fastembed"))  # 不依赖本机装没装 fastembed（CI 上没装）
+    monkeypatch.setenv("OPC_MODELS_DIR", str(tmp_path / "models"))
+    monkeypatch.setenv("OPC_RERANK", "auto")
+    assert rerank.default_reranker() is None                                       # 没下载过：auto 不启用
+    (tmp_path / "models" / "models--BAAI--bge-reranker-base").mkdir(parents=True)
+    assert isinstance(rerank.default_reranker(), rerank.LocalReranker)
+    monkeypatch.setenv("OPC_RERANK", "none")
+    assert rerank.default_reranker() is None

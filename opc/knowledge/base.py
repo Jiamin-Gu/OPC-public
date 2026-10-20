@@ -1,13 +1,17 @@
 """知识库：一个目录一个 SQLite 文件（kb.sqlite），存所有块的原文、位置和向量。
 
 数据来源（source）：
-- 文件：source 是相对路径，例如 docs/PRD.md、code/todo/cli.py。按内容哈希增量同步，只重建改动过的文件
-- 其他条目：source 带前缀，例如 task:<任务id>（任务说明、汇报和审查记录）。按前缀整体同步
+- 公司文件区的文件：source 是相对路径，例如 docs/PRD.md、code/todo/cli.py。按内容哈希增量同步，只重建改动过的文件
+- 资料库的文件：同样按文件同步，source 带前缀：lib:<文件名>（公司资料）、me:<文件名>（个人资料，所有公司共用）
+- 其他条目：source 带前缀，例如 task:<任务id>（任务说明、汇报和审查记录）、directive:<指令id>（一条指令的结论）。
+  按前缀整体同步
 
 检索：
 - keyword：BM25 关键词检索，精确匹配函数名、专有名词、错误信息
 - vector：向量相似度，按意思找（"退款怎么处理"能找到"取消订单时退回付款金额"）
 - hybrid（默认）：两路各取前若干名，用倒数排名融合（RRF）合并。向量不可用时自动退回 keyword
+- 重排序（v0.22，可选，rerank=True）：hybrid 先取前 RERANK_POOL 个候选，再用交叉编码器逐条打分取前 k（见 rerank.py）。
+  只用在人看的搜索上：排序更准，但前 k 条的召回略降、每次多约 2.5 秒；给模型的检索（模型会看全部 k 条）不用
 """
 import hashlib
 import os
@@ -20,12 +24,14 @@ from pathlib import Path
 import numpy as np
 
 from .chunking import TEXT_SUFFIXES, chunk_file
+from .loaders import LoadError, chunk_name, load_text
 from .embedding import Embedder, default_embedder
 from .search import BM25, rrf, tokenize
 
 SKIP_DIRS = {".git", "__pycache__", ".pytest_cache", ".mypy_cache", "node_modules", ".venv", "venv", ".coder"}
 MAX_FILE_BYTES = 1_000_000
 CANDIDATES = 5  # 混合检索时每一路取 k × 这个数的候选再融合
+RERANK_POOL = 15  # 重排序时从混合检索的前多少名里重新排（评测：15 个候选、每个 600 字最均衡）
 MODES = ("hybrid", "keyword", "vector")
 _DEFAULT = object()
 
@@ -40,11 +46,14 @@ CREATE INDEX IF NOT EXISTS chunks_source ON chunks(source);
 
 
 class KnowledgeBase:
-    def __init__(self, directory, embedder=_DEFAULT):
+    def __init__(self, directory, embedder=_DEFAULT, reranker=None):
         self.dir = Path(directory)
         self.dir.mkdir(parents=True, exist_ok=True)
         self.embedder: Embedder | None = default_embedder() if embedder is _DEFAULT else embedder
+        self.reranker = reranker      # 重排序模型（rerank.py），None 表示不重排
+        self.rerank_error = ""
         self.vector_error = ""  # 向量模型出错时记下原因，检索退回关键词
+        self.load_errors: dict[str, str] = {}  # 资料解析失败或没有文字的文件：{source: 原因}
         self.lock = threading.RLock()
         self.db = sqlite3.connect(self.dir / "kb.sqlite", check_same_thread=False)
         self.db.executescript(SCHEMA)
@@ -123,32 +132,60 @@ class KnowledgeBase:
 
     # ---------------------------------------------------------------- 同步
 
-    def sync_files(self, root) -> dict:
-        """把 root 下的文本文件同步进知识库：新增、修改的重新切块，删除的移出。返回统计。"""
+    def sync_files(self, root, prefix: str = "", kind: str = "file", documents: bool = False) -> dict:
+        """把 root 下的文件同步进知识库：新增、修改的重新切块，删除的移出。返回统计。
+
+        prefix / kind：资料库用（source 是 "lib:文件名"，kind 是 "lib"）。documents=True 时还解析 PDF、Word，
+        并且不限文件大小（资料是用户主动给的，不因为太大拒绝）；解析失败、没有文字的记进 load_errors。"""
         root = Path(root)
         stats = {"added": 0, "updated": 0, "removed": 0, "unchanged": 0}
+        if not root.is_dir():
+            root = None
         with self.lock:
-            known = dict(self.db.execute("SELECT source, hash FROM sources WHERE kind = 'file'").fetchall())
+            known = dict(self.db.execute("SELECT source, hash FROM sources WHERE kind = ?", (kind,)).fetchall())
             seen = set()
-            for path in sorted(self._walk(root)):
+            for path in sorted(self._walk(root, documents) if root else []):
                 rel = path.relative_to(root).as_posix()
+                source = prefix + rel
                 data = path.read_bytes()
-                if b"\0" in data[:8000]:  # 二进制文件
+                if not documents and b"\0" in data[:8000]:  # 二进制文件
                     continue
-                seen.add(rel)
+                seen.add(source)
                 digest = hashlib.sha256(data).hexdigest()
-                if known.get(rel) == digest:
+                if known.get(source) == digest:
                     stats["unchanged"] += 1
                     continue
-                stats["updated" if rel in known else "added"] += 1
-                text = data.decode("utf-8", errors="replace").replace("\r\n", "\n")
-                self._put_source(rel, "file", digest, chunk_file(rel, text))
-            for rel in set(known) - seen:
-                self._remove_source(rel)
+                stats["updated" if source in known else "added"] += 1
+                if documents:
+                    try:
+                        text = load_text(path)
+                        self.load_errors.pop(source, None)
+                        self.db.execute("DELETE FROM meta WHERE key = ?", (f"error:{source}",))
+                    except LoadError as e:  # 记进数据库：重启后资料列表里仍然能看到原因
+                        self.load_errors[source] = str(e)
+                        self._set_meta(f"error:{source}", str(e))
+                        text = ""
+                else:
+                    text = data.decode("utf-8", errors="replace").replace("\r\n", "\n")
+                self._put_source(source, kind, digest, chunk_file(chunk_name(rel), text) if text else [])
+            for source in set(known) - seen:
+                self._remove_source(source)
+                self.load_errors.pop(source, None)
+                self.db.execute("DELETE FROM meta WHERE key = ?", (f"error:{source}",))
                 stats["removed"] += 1
             stats["embedded"] = self._embed_missing()
             self.db.commit()
         return stats
+
+    def source_info(self, kind: str) -> dict[str, dict]:
+        """某一类来源的情况：{source: {chunks, updated, error}}（资料库列表用）。"""
+        with self.lock:
+            rows = self.db.execute("SELECT s.source, s.updated, COUNT(c.id) FROM sources s "
+                                   "LEFT JOIN chunks c ON c.source = s.source WHERE s.kind = ? GROUP BY s.source",
+                                   (kind,)).fetchall()
+            return {src: {"chunks": n, "updated": updated,
+                          "error": self.load_errors.get(src) or self._meta(f"error:{src}") or ""}
+                    for src, updated, n in rows}
 
     def sync_items(self, prefix: str, items: dict[str, tuple[str, str]]) -> dict:
         """同步一组非文件条目：items 是 {source: (标题, Markdown 文本)}，source 都以 prefix 开头。
@@ -175,26 +212,37 @@ class KnowledgeBase:
         return stats
 
     @staticmethod
-    def _walk(root: Path):
+    def _walk(root: Path, documents: bool = False):
+        from .loaders import LIBRARY_SUFFIXES
         for dirpath, dirnames, filenames in os.walk(root):
             dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS and not d.startswith(".")]
             for name in filenames:
                 p = Path(dirpath) / name
-                if p.suffix.lower() in TEXT_SUFFIXES and p.stat().st_size <= MAX_FILE_BYTES:
+                if name.startswith(".") or name.startswith("~$"):  # 隐藏文件、Word 打开时的临时文件
+                    continue
+                if documents:
+                    if p.suffix.lower() in LIBRARY_SUFFIXES:
+                        yield p
+                elif p.suffix.lower() in TEXT_SUFFIXES and p.stat().st_size <= MAX_FILE_BYTES:
                     yield p
 
     # ---------------------------------------------------------------- 检索
 
-    def search(self, query: str, k: int = 8, mode: str = "hybrid", source_prefix: str | None = None) -> list[dict]:
-        """返回最相关的 k 个块：来源、行号、标题、原文、片段，以及两路检索各自的名次。"""
+    def search(self, query: str, k: int = 8, mode: str = "hybrid", source_prefix: str | None = None,
+               source_filter=None, rerank: bool = False) -> list[dict]:
+        """返回最相关的 k 个块：来源、行号、标题、原文、片段，以及两路检索各自的名次。
+        source_prefix / source_filter（source -> bool）：只在一部分来源里检索。"""
         if mode not in MODES:
             raise ValueError(f"mode 只能是 {MODES}")
         query = query.strip()
         if not query:
             return []
         with self.lock:
-            allowed = ({cid for cid, c in self.chunks.items() if c["source"].startswith(source_prefix)}
-                       if source_prefix else None)
+            allowed = None
+            if source_prefix or source_filter:
+                allowed = {cid for cid, c in self.chunks.items()
+                           if (not source_prefix or c["source"].startswith(source_prefix))
+                           and (not source_filter or source_filter(c["source"]))}
             n = k * CANDIDATES
             keyword = [cid for cid, _ in self.bm25.search(query, n, allowed)] if mode != "vector" else []
             vector = self._vector_search(query, n, allowed) if mode != "keyword" else []
@@ -210,10 +258,31 @@ class KnowledgeBase:
                 must = list(dict.fromkeys(keyword[:1] + vector[:1]))
                 rest = [c for c in order if c not in must][:max(k - len(must), 0)]
                 ranked = sorted(must + rest, key=order.index)[:k]
+            scores = {}
+            if mode == "hybrid" and rerank and self.reranker:
+                pool = (order if vector else keyword)[:RERANK_POOL]
+                scores = self._rerank(query, pool)
+                if scores:
+                    ranked = sorted(pool, key=lambda c: -scores[c])[:k]
             kw_rank = {c: i for i, c in enumerate(keyword, 1)}
             vec_rank = {c: i for i, c in enumerate(vector, 1)}
             return [{**self.chunks[c], "snippet": snippet(self.chunks[c]["text"], query),
-                     "keyword_rank": kw_rank.get(c), "vector_rank": vec_rank.get(c)} for c in ranked]
+                     "keyword_rank": kw_rank.get(c), "vector_rank": vec_rank.get(c),
+                     **({"rerank_score": round(scores[c], 3)} if c in scores else {})} for c in ranked]
+
+    def _rerank(self, query: str, pool: list[int]) -> dict[int, float]:
+        """给候选打相关度分：{块 id: 分数}。模型出错时返回空，检索退回不重排的结果。"""
+        if not pool:
+            return {}
+        texts = [" / ".join(x for x in (self.chunks[c]["source"], self.chunks[c]["title"]) if x)
+                 + "\n" + self.chunks[c]["text"] for c in pool]
+        try:
+            values = self.reranker.scores(query, texts)
+        except Exception as e:
+            self.rerank_error = f"{type(e).__name__}: {e}"
+            return {}
+        self.rerank_error = ""
+        return dict(zip(pool, values))
 
     def _vector_search(self, query: str, n: int, allowed) -> list[int]:
         if not self.embedder or not self.vectors:
@@ -240,7 +309,8 @@ class KnowledgeBase:
         with self.lock:
             sources = self.db.execute("SELECT kind, COUNT(*) FROM sources GROUP BY kind").fetchall()
             return {"chunks": len(self.chunks), "sources": dict(sources), "vectors": len(self.vectors),
-                    "embedder": self.embedder.name if self.embedder else None, "vector_error": self.vector_error}
+                    "embedder": self.embedder.name if self.embedder else None, "vector_error": self.vector_error,
+                    "reranker": self.reranker.name if self.reranker else None, "rerank_error": self.rerank_error}
 
     def close(self) -> None:
         self.db.close()

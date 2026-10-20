@@ -50,6 +50,22 @@ TOOLS = [
 ]
 
 
+# 公司知识库（长期记忆）的检索工具：公司打开了知识库时给所有角色（只读，讨论和审查时也能用）
+KB_TOOL = {"type": "function", "function": {
+    "name": "kb_search",
+    "description": "检索公司知识库（公司的长期记忆）：以前的文档和代码、任务记录（汇报、审查意见、CEO 裁决）、"
+                   "每条指令的结论（CEO 的要求和插话、定下的口径、最终汇报），以及 CEO 提供的公司资料和个人资料。"
+                   "返回最相关的片段和出处。当前任务的上游成果已经写在任务说明里，不用检索。",
+    "parameters": {"type": "object", "properties": {
+        "query": {"type": "string", "description": "要找什么：用一句话或几个关键词描述；查函数名、错误名、专有名词时直接写这个名字"},
+        "scope": {"type": "string", "enum": ["all", "files", "records", "library"],
+                  "description": "在哪里找：all 全部（默认）；files 共享文件区的文档和代码；records 任务记录和指令结论"
+                                 "（以前做过什么、定过什么、CEO 怎么裁决的）；library CEO 提供的公司资料和个人资料"},
+        "k": {"type": "integer", "description": "返回几条，默认 5，最多 10"}},
+        "required": ["query"]}}}
+KB_SCOPES = ("all", "files", "records", "library")
+
+
 class Cancelled(Exception):
     """CEO 点了停止。"""
 
@@ -84,10 +100,21 @@ def web_rule(company: Company) -> str:
             "不要编造数据或链接。")
 
 
+def kb_rule(company: Company, number: int) -> str:
+    if not company.kb:
+        return ""
+    return (f"\n{number}. 公司有知识库（kb_search）：需要以前的决定和口径、已有的文档或代码、CEO 提供的资料时先检索，"
+            "不要凭印象写；当前任务的上游成果已经在任务说明里，不用再检索。用到检索结果时写明出处"
+            "（例如「依据：公司资料《品牌规范.pdf》第 3 页」）；检索不到就说明没找到，不要编造。"
+            "CEO 提供的公司资料和个人资料是 CEO 给定的依据，比同事写的文档更权威：两者冲突时以资料为准，并在汇报里指出；"
+            "资料之间互相矛盾、拿不准时，列为需要 CEO 决定的事项。")
+
+
 def system_prompt(company: Company, role_id: str) -> str:
     role = ROLES[role_id]
     roster = "\n".join(f"- {ROLES[r].icon} {ROLES[r].name}：{ROLES[r].tagline}" for r in company.role_ids)
     rule = code_rule(company, role_id)
+    web = web_rule(company)
     return f"""你是「{company.meta['name']}」公司的{role.name}。
 公司目标：{company.meta.get('mission') or '（CEO 还没有设定）'}
 公司成员：
@@ -102,7 +129,7 @@ def system_prompt(company: Company, role_id: str) -> str:
 2. 产出要写成文件：公司的约定是文档用 Markdown 放在 docs/、代码放在 code/，文件名要有意义；具体交付哪些文件、用什么格式，以任务说明为准。{rule}。
 3. 更新已有文件前先读取它。只改其中一部分时用 edit_file 改需要改的地方，同一个文件的所有修改放进一次调用的 edits 列表；不要用 write_file 把整份文件重写一遍（重写既慢，又容易把原本正确的内容改坏）。不要改动其他同事的文件，除非任务明确要求。
 4. 内容要具体、可执行，不要空话套话。信息不足时做合理假设，并在文档里注明。
-5. 不要声称做了你没有做的事。全部使用中文，包括工具调用之间的进度说明（例如"我先读一下需求文档"）。{web_rule(company)}"""
+5. 不要声称做了你没有做的事。全部使用中文，包括工具调用之间的进度说明（例如"我先读一下需求文档"）。{web}{kb_rule(company, 7 if web else 6)}"""
 
 
 def execute_tool(company: Company, role_id: str, name: str, raw_args: str) -> tuple[str, dict, bool]:
@@ -288,6 +315,32 @@ def run_role(*args, **kwargs) -> dict:
     """
     from .worker import run
     return run(*args, **kwargs)
+
+
+def call_kb(company: Company, raw_args: str) -> tuple[str, dict]:
+    """执行 kb_search：返回 (给模型的结果, 给界面的摘要)。界面显示查了什么、找到几条、出处。"""
+    from .knowledge import service
+    try:
+        args = json.loads(raw_args or "{}")
+    except json.JSONDecodeError as e:
+        return f"错误：参数不是合法的 JSON（{e}）", {"name": "kb_search", "ok": False}
+    query = str(args.get("query") or "").strip()
+    scope = args.get("scope") or "all"
+    if not query:
+        return "错误：需要提供 query（要找什么）", {"name": "kb_search", "ok": False}
+    if scope not in KB_SCOPES:
+        return f"错误：scope 只能是 {'、'.join(KB_SCOPES)}", {"name": "kb_search", "query": query, "ok": False}
+    try:
+        k = max(1, min(int(args.get("k") or 5), 10))
+    except (TypeError, ValueError):
+        k = 5
+    try:
+        results = service.search(company, query, scope, k)
+    except Exception as e:  # 知识库出错不影响角色继续工作
+        return f"错误：知识库检索失败（{type(e).__name__}: {e}）", {"name": "kb_search", "query": query, "ok": False}
+    return service.format_results(results, query), {
+        "name": "kb_search", "query": query, "scope": scope, "hits": len(results), "ok": True,
+        "sources": [service.label(r) for r in results]}
 
 
 def _call_web(hub, name: str, raw_args: str) -> tuple[str, dict]:

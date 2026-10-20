@@ -1,3 +1,7 @@
-# 可选：公司知识库的本地向量模型（按意思检索）。
-# 没有安装时知识库只用关键词检索。第一次使用会从 Hugging Face 下载 BAAI/bge-small-zh-v1.5（约 95 MB）到 ~/.opc/models
+# 可选：公司知识库
+# - fastembed：本地向量模型（按意思检索）。没有安装时只用关键词检索。第一次使用会从 Hugging Face 下载
+#   BAAI/bge-small-zh-v1.5（约 95 MB）到 ~/.opc/models（可以用 OPC_MODELS_DIR 换位置）
+# - pypdf、python-docx：资料库解析 PDF 和 Word。没有安装时只能上传文本类资料
 fastembed>=0.4
+pypdf>=4.0
+python-docx>=1.1

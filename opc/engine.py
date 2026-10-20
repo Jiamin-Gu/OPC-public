@@ -21,6 +21,9 @@ from . import effort
 from .graph import ALL, Ctx
 from .inbox import Inbox
 from .jobs import RUNNERS, JobCtx
+from . import tracing
+from .knowledge import service as kb_service
+from .roles import ROLES
 from .messages import MessageLog
 from .state import new_id
 
@@ -55,6 +58,11 @@ class Engine:
         self._stopping = False
         self._thread = threading.Thread(target=self._loop, daemon=True, name=f"engine-{company.id}")
         self._thread.start()
+        # 知识库同步任务记录和指令结论时，从这里读任务看板和全公司频道
+        kb_service.register(company.id, self._kb_records)
+
+    def _kb_records(self) -> dict:
+        return {"tasks": dict(self.state().get("tasks") or {}), "channels": {"all": self.log.read(ALL)}}
 
     # ---------- 对外 ----------
 
@@ -135,6 +143,7 @@ class Engine:
         self._maybe_finish_stop()
 
     def close(self) -> None:
+        kb_service.unregister(self.company.id, self._kb_records)
         self._queue.put(_STOP)
 
     # ---------- 调度图 ----------
@@ -234,11 +243,13 @@ class Engine:
             self.jobs[job] = info
         if info.get("task_id"):
             self.stops.clear(info["task_id"])  # 之前的暂停信号已经处理过了
+        span = self._job_span(job, info, jctx)
 
         def go():
             result = None
             try:
-                result = RUNNERS[info["kind"]](jctx)
+                with tracing.use(span):
+                    result = RUNNERS[info["kind"]](jctx)
             except Exception as e:  # 理论上 RUNNERS 自己会处理；兜底，不让任务永远挂着
                 text = f"工作运行出错：{type(e).__name__}: {e}"
                 self.on_event({"type": "notice", "level": "error", "text": text})
@@ -250,6 +261,7 @@ class Engine:
                     result = {"type": "job_done", "job": job, "kind": info["kind"], "task_id": info["task_id"],
                               "task": failed}
             finally:
+                self._end_job_span(span, info, result)
                 if result and result.get("type") == "job_done":
                     self.submit(result)
                 elif result and result.get("usage"):  # 私聊：只记用量
@@ -264,6 +276,39 @@ class Engine:
                 if idle:
                     self.on_idle()
         threading.Thread(target=go, daemon=True, name=f"job-{job}").start()
+
+    def _job_span(self, job: str, info: dict, jctx: JobCtx):
+        """这个工作运行在链路里的步骤：执行 / 审查挂在指令的链路下，私聊自成一条链路。"""
+        try:
+            name = lambda r: ROLES[r].name if r in ROLES else r  # noqa: E731
+            if info["kind"] == "chat":
+                root = tracing.root(self.company, f"chat:{job}", f"私聊：{name(jctx.role)}",
+                                    kind="chat", **{"opc.role": jctx.role})
+                return root
+            task, did = jctx.task or {}, (jctx.directive or {}).get("id")
+            if not did:
+                return None
+            root = tracing.root(self.company, f"directive:{did}", f"指令：{(jctx.directive.get('text') or '')[:40]}")
+            role = task.get("reviewer") if info["kind"] == "review" else task.get("assignee")
+            label = "审查" if info["kind"] == "review" else "执行"
+            return root.child(f"{label}《{task.get('title', '')}》（{name(role)}）", "agent",
+                              **{"opc.role": role, "opc.task_id": task.get("id"), "opc.job": info["kind"]})
+        except Exception:  # 链路记录失败不影响工作
+            return None
+
+    @staticmethod
+    def _end_job_span(span, info: dict, result: dict | None) -> None:
+        if span is None:
+            return
+        task = (result or {}).get("task") or {}
+        if task.get("status"):
+            span.set(**{"opc.task_status": task["status"]})
+        u = (result or {}).get("usage")
+        if isinstance(u, dict) and "prompt" in u:
+            span.set(**{"opc.calls": u.get("calls"), "opc.input_tokens": u.get("prompt"), "opc.output_tokens": u.get("completion")})
+        failed = task.get("status") == "failed" or (result is None)
+        span.finish(error=(task.get("result") or "工作运行没有结果") if failed else None,
+                    status="paused" if task.get("status") in ("pending", "rework") and task.get("interrupted") else None)
 
     def _maybe_finish_stop(self) -> None:
         """停止中，所有工作运行都停下、之前的事件都处理完以后，送一个 stopped 事件收尾。"""

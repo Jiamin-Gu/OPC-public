@@ -132,7 +132,7 @@ class Company:
         label = model_settings.describe(self.meta.get("model"), settings)
         for r, entry in zip(roles, self.meta["roles"]):  # 价格（元/百万 token，可选）：界面按它估算花费
             r["price"] = model_settings.price(self.model_ref(entry["id"], settings), settings)
-        return {**meta, "roles": roles, "model_ref": self.meta.get("model"), "effort": self.effort,
+        return {**meta, "roles": roles, "model_ref": self.meta.get("model"), "effort": self.effort, "kb": self.kb,
                 "planner_price": model_settings.price(self.model_ref(None, settings), settings),
                 "model_label": label or f"全局默认（{model_settings.describe(settings['default'], settings)}）"}
 
@@ -312,6 +312,16 @@ class Company:
         return bool(self.meta.get("web", False))
 
     @property
+    def kb(self) -> bool:
+        """角色能不能检索公司知识库（长期记忆）：默认打开，以前创建的公司没有这个设置也当作打开。"""
+        return bool(self.meta.get("kb", True))
+
+    def set_kb(self, enabled: bool) -> None:
+        with self._lock:
+            self.meta["kb"] = bool(enabled)
+            _atomic_write(self.root / "company.json", json.dumps(self.meta, ensure_ascii=False, indent=1))
+
+    @property
     def allow_run(self) -> bool:
         """是否允许工程师通过编码 agent 运行命令（创建公司时选择）。"""
         return bool(self.meta.get("allow_run", False))
@@ -332,7 +342,7 @@ class CompanyStore:
 
     def create(self, name: str, mission: str, roles: list[dict], allow_run: bool = False, web: bool = False,
                prompt_level: str = prompts.DEFAULT_LEVEL, model: dict | None = None,
-               effort_level: str = effort.DEFAULT) -> Company:
+               effort_level: str = effort.DEFAULT, kb: bool = True) -> Company:
         """model：公司默认模型（模型连接的引用），空表示用全局默认。角色的 model 同样是引用，空表示跟随公司默认；
         旧接口在角色上直接传服务商、地址、密钥仍然支持。"""
         name = name.strip()
@@ -369,8 +379,8 @@ class CompanyStore:
             raise ValueError(f"未知的投入档位：{effort_level}")
         company_id = datetime.now().strftime("%Y%m%d-%H%M%S-") + uuid.uuid4().hex[:6]
         meta = {"id": company_id, "name": name, "mission": mission.strip(), "roles": role_entries,
-                "allow_run": bool(allow_run), "web": bool(web), "prompt_level": prompts.normalize(prompt_level),
-                "created": now()}
+                "allow_run": bool(allow_run), "web": bool(web), "kb": bool(kb),
+                "prompt_level": prompts.normalize(prompt_level), "created": now()}
         if company_model:
             meta["model"] = company_model
         meta["effort"] = effort_level

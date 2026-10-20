@@ -1,8 +1,10 @@
 # OPC：一人公司
 
+[![tests](https://github.com/Jiamin-Gu/OPC-public/actions/workflows/tests.yml/badge.svg)](https://github.com/Jiamin-Gu/OPC-public/actions/workflows/tests.yml)
+
 基于 **LangGraph** 的多角色 AI 协作平台。你是 CEO：选好团队成员，给全公司下一条指令，规划助手把它拆成带依赖关系的任务，产品经理、工程师、设计师、测试等角色 agent 并行执行、互相审查，产出需求文档、技术方案、代码和测试计划。执行中你随时可以插话、让某个任务返工，下游会自动跟上。
 
-**当前版本：v0.20.0** · [更新记录](CHANGELOG.md) · [使用教程](docs/usage.md) · [架构与设计决策](docs/design.md) · [真实运行示例](examples/README.md)
+**当前版本：v0.22.0** · [更新记录](CHANGELOG.md) · [使用教程](docs/usage.md) · [架构与设计决策](docs/design.md) · [真实运行示例](examples/README.md)
 
 ## 亮点
 
@@ -11,10 +13,12 @@
 - **跟谁说都一样**：在全公司、任何成员的私聊或项目经理频道里说"上游那份不对"，调度助手都整理成同一组调整（谁返工、哪些下游暂停），确认后执行，下游带着改动对比同步
 - **机械验收，而不是让模型自评**：规划时生成交付要求和验收标准，提交时逐条检查；审查意见必须引用原文并由系统核对，复审只看上一轮的问题和本次改动，收敛后收尾复审
 - **小事快、大事稳**：一个人一次能做完的小任务不用审批、不安排审查，几十秒出结果；大任务走完整的规划、审查、返工流程，审查谈不拢时交给 CEO 裁决
+- **长期记忆（RAG）**：每家公司一个知识库，收录文档、代码、任务记录、每条指令的结论，以及你上传的 PDF / Word 资料；BM25 + 向量混合检索（人看的搜索再加重排序），结果带出处（精确到文件行号或资料的页）。角色干活时按需检索，规划新指令时自动召回以前定下的口径，编码 agent 也能查
+- **执行链路**：每条指令从规划到汇报的每一步（每次模型调用、每次工具调用）在瀑布图上看得到：用时、token、首字延迟、哪里出错；可以按 OpenTelemetry 标准导出到 Jaeger、Langfuse
 - **成本看得见**：每条指令、每个任务的 token 用量都摆出来，可以按价格估算花费；"投入档位"按审查轮数和执行步数封顶，而不是按 token 截断
 - **角色库**：6 个预设角色，另有 277 个按部门分组的专业角色可选（提示词来自开源角色库 agency-agents-zh，接上 OPC 里 AI 能力边界的说明）
 - **模型、工具都可以换**：任何 OpenAI 兼容接口都能用，任何 MCP 服务器的工具都能接给角色；模型连接配置一次，公司选默认模型，个别成员可以单独换
-- **工程**：191 个自动化测试（用脚本化的假模型，不消耗 API）；SQLite 持久化，关掉再打开对话、任务、待审批的计划都在
+- **工程**：215 个自动化测试（用脚本化的假模型，不消耗 API）；SQLite 持久化，关掉再打开对话、任务、待审批的计划都在
 
 ## 快速开始
 
@@ -65,12 +69,15 @@ python -m opc.web           # 加 --demo 进入演示模式（假模型，不需
 | [真实运行示例](examples/README.md) | 多次真实运行的完整产出、对话记录和对比实验 |
 | [更新记录](CHANGELOG.md) | 每个版本改了什么、为什么改 |
 
-## 运行测试
+## 运行测试与发布
 
 ```bash
 pip install pytest
-python -m pytest            # 191 个测试，用假模型，不调用 API
+python -m pytest            # 215 个测试，用假模型，不调用 API
 ```
+
+- **CI**：每次推送和 PR，GitHub Actions 在 Ubuntu（Python 3.10 / 3.12）和 Windows（Python 3.12）上跑全部测试（`.github/workflows/tests.yml`）
+- **CD**：推送版本标签（例如 `v0.21.0`）时自动发布（`.github/workflows/release.yml`）：跑全部测试 → 检查标签、代码里的版本号和 CHANGELOG 一致（`scripts/release_check.py`）→ 打包 → 在全新的虚拟环境里装好安装包做冒烟测试（`scripts/smoke_installed.py`）→ 创建 GitHub Release，说明取自 CHANGELOG 里这一版的内容，附上安装包。任何一步不通过就停下、不发布。试跑可以用 `v0.21.0-rc.1` 这样的标签（发布成预发布）
 
 ## 许可证与致谢
 

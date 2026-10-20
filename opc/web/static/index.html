@@ -56,6 +56,11 @@
           <span><b>允许联网</b>（搜索、读网页）<br>
             <em class="muted" id="webNote">角色需要最新信息（市场、竞品、新闻、技术文档）时可以上网查。通过 MCP 服务器提供。</em></span>
         </label>
+        <label class="run-toggle">
+          <input type="checkbox" id="cKb" checked>
+          <span><b>使用知识库</b>（长期记忆）<br>
+            <em class="muted">角色干活时可以检索公司以前的文档、代码、任务记录、每条指令的结论，以及你上传的资料；规划新指令时自动参考以前定下的口径。</em></span>
+        </label>
         <div class="coder-missing muted" id="coderMissing" hidden>没有安装 Coding-agent：工程师只能写代码，不能运行和测试。在项目目录运行 <code>pip install -r requirements.txt</code> 后重启即可。</div>
         <div class="form-error" id="createError"></div>
         <button class="btn primary big" type="submit">创建公司</button>
@@ -115,7 +120,7 @@
       </div>
       <div class="tab-body" id="kbTab" hidden>
         <form class="kb-form" id="kbForm">
-          <input id="kbQuery" placeholder="搜索公司的文档、代码和任务记录" autocomplete="off">
+          <input id="kbQuery" placeholder="搜索公司的文档、代码、记录和资料" autocomplete="off">
           <select id="kbMode" title="检索方式">
             <option value="hybrid">混合</option>
             <option value="keyword">关键词</option>
@@ -123,7 +128,22 @@
           </select>
           <button class="btn primary" type="submit">搜索</button>
         </form>
-        <div class="kb-status" id="kbStatus">只读搜索：公司文件区和任务记录会自动同步进知识库。</div>
+        <div class="kb-status" id="kbStatus">公司文件区、任务记录、指令结论和资料库会自动同步进知识库，角色干活时也从这里检索。</div>
+        <details class="kb-lib" id="kbLib">
+          <summary>📁 资料库 <span class="muted" id="libCount"></span></summary>
+          <p class="muted lib-note">上传给角色参考的资料：PDF、Word（.docx）、Markdown 和文本文件，可以拖进来。角色只能检索和阅读，不会修改；资料和同事写的文档冲突时以资料为准。</p>
+          <div class="lib-sec" data-scope="company">
+            <div class="lib-head"><b>公司资料</b><span class="muted">只属于这家公司</span><div class="spacer"></div>
+              <button type="button" class="btn small" data-up="company">上传</button></div>
+            <div class="lib-list" id="libCompany"></div>
+          </div>
+          <div class="lib-sec" data-scope="personal">
+            <div class="lib-head"><b>个人资料</b><span class="muted">所有公司共用</span><div class="spacer"></div>
+              <button type="button" class="btn small" data-up="personal">上传</button></div>
+            <div class="lib-list" id="libPersonal"></div>
+          </div>
+          <input type="file" id="libFile" multiple hidden accept=".pdf,.docx,.md,.markdown,.txt,.rst,.csv,.json,.yaml,.yml,.html">
+        </details>
         <div class="kb-results" id="kbResults"></div>
       </div>
     </aside>
@@ -169,6 +189,8 @@
     <div class="dlg-body">
       <label class="field">投入档位（只限审查轮数和执行步数，不限 token；到了上限交给你决定）<select id="coEffort"></select></label>
       <div class="effort-detail muted" id="coEffortDetail"></div>
+      <label class="run-toggle"><input type="checkbox" id="coKb">
+        <span><b>使用知识库</b>（长期记忆）<br><em class="muted">角色可以检索公司的文档、记录和资料；规划时自动参考以前的结论。资料在右侧「知识库」里上传。</em></span></label>
       <label class="field">公司默认模型（规划、汇报，以及所有"跟随公司默认"的成员）<select id="coModel"></select></label>
       <div class="field team-head"><span>各成员</span>
         <button type="button" class="btn ghost small" id="coFollowAll">全部跟随公司默认</button></div>
@@ -185,6 +207,19 @@
     <div class="dlg-head"><b>用量明细</b><div class="spacer"></div>
       <button class="icon-btn" data-close aria-label="关闭">✕</button></div>
     <div class="dlg-body" id="usageBody"></div>
+  </dialog>
+
+  <!-- ============ 执行链路 ============ -->
+  <dialog class="dlg wide" id="traceDlg">
+    <div class="dlg-head"><b id="traceTitle">执行链路</b><div class="spacer"></div>
+      <button class="icon-btn" data-close aria-label="关闭">✕</button></div>
+    <div class="dlg-body">
+      <div class="trace-summary" id="traceSummary"></div>
+      <div class="trace-legend"><span class="tk-directive">指令</span><span class="tk-chain">规划 / 汇报</span><span class="tk-agent">执行 / 审查</span>
+        <span class="tk-llm">模型调用</span><span class="tk-tool">工具</span><span class="tk-retrieval">检索</span><span class="tk-err">出错</span></div>
+      <div class="trace-rows" id="traceRows"></div>
+      <pre class="trace-detail" id="traceDetail">点一行看详情：模型、token、首字延迟、输入输出的开头、出错原因……</pre>
+    </div>
   </dialog>
 
   <div class="toast" id="toast" hidden></div>

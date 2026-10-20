@@ -5,21 +5,27 @@
 编码 agent 的每一步（编辑文件、运行命令及退出码）都会实时显示在工程师的消息里。
 
 Coding-agent 没有安装时，工程师退回到只写文件、不运行代码的模式。
+
+公司打开了知识库时，编码 agent 也多一个 kb_search 工具（KBSearchTool）：自己查需求、以前的决定和已有代码。
+这个工具写在 OPC 里，按 Coding-agent 的工具接口实现后注入进去，Coding-agent 本身不用改。
 """
 import re
 import threading
 import time
+
+from . import tracing
 
 try:
     import coder
     from coder.agent import Agent as CodingAgent
     from coder.permissions import PermissionManager
     from coder.tools import ProcessManager, build_tools
+    from coder.tools.base import Tool as CoderTool
     from coder.workspace import Workspace
     AVAILABLE = tuple(int(x) for x in coder.__version__.split(".")[:2]) >= (1, 0)
     VERSION = coder.__version__
 except ImportError:
-    AVAILABLE, VERSION = False, None
+    AVAILABLE, VERSION, CoderTool = False, None, object
 
 CODER_MAX_STEPS = 30
 # 编码 agent 的上下文超过这么多 token 就压缩（它自己的默认值是 6 万）。
@@ -51,6 +57,25 @@ RUN_TOOLS = ("run_command", "start_process", "process_output", "stop_process", "
 
 class Stop(Exception):
     """CEO 点了停止（由调用方转换成 OPC 的 Cancelled）。"""
+
+
+class KBSearchTool(CoderTool):
+    """给编码 agent 的公司知识库检索工具（只读，不需要确认）。参数和角色的 kb_search 一样。"""
+    name = "kb_search"
+    needs_permission = False
+
+    def __init__(self, workspace, company):
+        from .agents import KB_TOOL
+        super().__init__(workspace)
+        self.company = company
+        self.description = KB_TOOL["function"]["description"]
+        self.parameters = KB_TOOL["function"]["parameters"]
+
+    def run(self, **kwargs) -> str:
+        import json
+
+        from .agents import call_kb
+        return call_kb(self.company, json.dumps(kwargs, ensure_ascii=False))[0]
 
 
 class ProgressUI:
@@ -88,6 +113,9 @@ class ProgressUI:
         self._check()
         self._current = (name, args)
         self._chars = 0
+        parent = tracing.current()  # 链路：编码 agent 的每次工具调用挂在 code_agent 这个步骤下面
+        self._span = parent.child(f"编码 agent 工具 {name}", "tool", **{
+            "gen_ai.tool.name": name, "opc.via": "coder", "opc.args_preview": tracing.preview(args, 200)}) if parent else None
 
     def tool_result(self, result):
         self._check()
@@ -107,10 +135,17 @@ class ProgressUI:
                     self.files.append(path)
                 self.company.record_author(path, self.author)
                 self.emit({"type": "file", "path": path, "author": self.author})
+        elif name == "kb_search":
+            m = re.match(r"找到 (\d+) 条", result)
+            step.update(query=args.get("query", ""), hits=int(m.group(1)) if m else 0)
         else:
             step["path"] = args.get("path") or args.get("pattern") or ""
         self.log.append(step)
         self.emit({"type": "tool", **self.base, **step})
+        span, self._span = getattr(self, "_span", None), None
+        if span is not None:
+            span.set(**{k: v for k, v in step.items() if k in ("path", "command", "exit")})
+            span.finish(error=result[:300] if not step["ok"] else None)
 
     def info(self, text):
         pass
@@ -134,6 +169,8 @@ def run_code_agent(company, role_id: str, task: str, emit, base_event: dict, can
     if not allow_run:  # 公司没有允许运行代码：只能读写。所有能执行命令的工具都要去掉，包括后台进程
         for name in RUN_TOOLS:
             tools.pop(name, None)
+    if company.kb:
+        tools["kb_search"] = KBSearchTool(workspace, company)
     ui = ProgressUI(company, role_id, emit, base_event, cancel)
     agent = CodingAgent(company.llm_for(role_id), tools, workspace,
                         PermissionManager(ask=ui.ask_permission, auto=True), ui, max_steps=CODER_MAX_STEPS,

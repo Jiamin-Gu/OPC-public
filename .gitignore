@@ -6,3 +6,5 @@ __pycache__/
 venv/
 build/
 *.egg-info/
+dist/
+release_notes.md

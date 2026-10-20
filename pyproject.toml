@@ -17,6 +17,8 @@ dependencies = [
     "fastapi>=0.110",
     "uvicorn>=0.29",
     "websockets>=12.0",
+    "numpy>=1.24",  # 知识库的向量检索（v0.21 起启动时就会加载知识库）
+    "httpx>=0.27",  # 直接用到（模型调用、MCP 客户端）；新版 openai 不再带上它
 ]
 
 [project.optional-dependencies]
@@ -40,3 +42,8 @@ include = ["opc*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["tests"]
+filterwarnings = [
+    # test_web 里故意在工作线程里抛 SystemExit（模拟程序被关掉）。线程结束得晚时，pytest 会在后面别的测试里才报出来，
+    # 那个测试上的 filterwarnings 管不到；这里只忽略这一条模拟的，其他线程异常照样报
+    "ignore:(?s).*模拟程序被关掉:pytest.PytestUnhandledThreadExceptionWarning",
+]

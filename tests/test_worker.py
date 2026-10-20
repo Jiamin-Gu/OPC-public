@@ -142,7 +142,7 @@ def test_readonly_run_cannot_write(company):
     """审查和回答同事时只读：只提供查看的工具，想写文件也会被拒绝。"""
     llm = ScriptLLM([reply("顺手改一下", [call("c1", "write_file", path="docs/x.md", content="改了")]), reply("看完了")])
     out, _ = go(company, llm, readonly=True)
-    assert set(llm.tools[0]) == {"list_files", "read_file"}
+    assert set(llm.tools[0]) == {"list_files", "read_file", "kb_search"}  # 检索知识库也是只读的
     assert {"name": "write_file", "ok": False} in out["tools"] and not company.list_files()
 
 

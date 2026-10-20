@@ -26,9 +26,9 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.runtime import Runtime
 from langgraph.types import Command, interrupt
 
-from . import web_tools
-from .agents import (Cancelled, LiveWriter, _call_web, _delegate_to_coder, execute_tool, system_prompt, tools_for,
-                     uses_coder)
+from . import tracing, web_tools
+from .agents import (KB_TOOL, Cancelled, LiveWriter, _call_web, _delegate_to_coder, call_kb, execute_tool,
+                     system_prompt, tools_for, uses_coder)
 from .changes import Either
 from .company import Company
 
@@ -244,58 +244,75 @@ def tools_node(state: WorkerState, runtime: Runtime[WorkerCtx]) -> dict:
     allowed = {t["function"]["name"] for t in ctx.tools}
     for call in state["messages"][-1]["tool_calls"]:
         name, raw = call["function"]["name"], call["function"]["arguments"]
-        ctx.emit({"type": "activity", **ctx.base_event, "step": state.get("steps", 0), "phase": "tool", "tool": name,
-                  "path": _arg(raw, "path") or _arg(raw, "role")})
-        if call["id"] in (state.get("bad_calls") or []):  # 参数不是合法 JSON：不执行，让模型重新调用
-            result = BAD_ARGS
-            summary = {"name": name, "ok": False}
-            logs.append(summary)
-            ctx.emit({"type": "tool", **ctx.base_event, **summary})
-        elif name not in allowed:  # 只执行这次提供给模型的工具（例如只读讨论时不能写文件）
-            result = f"错误：这次不能使用 {name} 工具"
-            summary = {"name": name, "ok": False}
-            logs.append(summary)
-            ctx.emit({"type": "tool", **ctx.base_event, **summary})
-        elif name in ctx.handlers:
-            try:
-                result = ctx.handlers[name](json.loads(raw or "{}"))
-                ok = not result.startswith("错误")
-            except json.JSONDecodeError as e:
-                result, ok = f"错误：参数不是合法的 JSON（{e}）", False
-            summary = {"name": name, "ok": ok}
-            logs.append(summary)
-            ctx.emit({"type": "tool", **ctx.base_event, **summary})
-            _observe(ctx, summary)
-        elif name in ctx.web_names:
-            result, summary = _call_web(ctx.hub, name, raw)
-            logs.append(summary)
-            ctx.emit({"type": "tool", **ctx.base_event, **summary})
-        elif name == "code_agent" and uses_coder(ctx.role_id):
-            try:  # 编码 agent 也会响应暂停：停下后把情况告诉角色，恢复时它自己决定怎么继续
-                result = _delegate_to_coder(ctx.company, ctx.role_id, raw, ctx.emit, ctx.base_event,
-                                            Either(ctx.cancel, *([ctx.stop] if ctx.stop else [])), logs, files, usage)
-            except Cancelled:
-                if ctx.cancel.is_set():
-                    raise
-                result = "（编码 agent 被暂停了，这一步还没完成；继续时请检查已经改了哪些文件）"
-        elif name in ("write_file", "edit_file") and ctx.can_write and (refused := ctx.can_write(_arg(raw, "path"), name)):
-            result = f"错误：{refused}"  # 别人的文件不能改（执行任务时）
-            summary = {"name": name, "path": _arg(raw, "path"), "ok": False}
-            logs.append(summary)
-            ctx.emit({"type": "tool", **ctx.base_event, **summary})
-            _observe(ctx, summary)
-        else:
-            result, summary, wrote = execute_tool(ctx.company, ctx.role_id, name, raw)
-            logs.append(summary)
-            ctx.emit({"type": "tool", **ctx.base_event, **summary})
-            _observe(ctx, summary)
-            if wrote:
-                files.append(summary["path"])
-                ctx.emit({"type": "file", "path": summary["path"], "author": ctx.role_id})
+        with tracing.span(f"工具 {name}", "tool", **{"gen_ai.tool.name": name, "opc.args_preview": tracing.preview(raw, 200)}) as span:
+            result = _tool(ctx, state, call, name, raw, logs, files, usage, allowed)
+            span.set(**{"opc.result_chars": len(result or ""), "opc.path": _arg(raw, "path") or None,
+                        "opc.query": _arg(raw, "query") or None})
+            if result and result.startswith("错误"):
+                span.finish(error=result[:300])
         out.append({"role": "tool", "tool_call_id": call["id"], "content": result})
     if ctx.after_tools:
         ctx.after_tools()
     return {"messages": out, "tools": logs, "files": files, "usage": usage}
+
+
+def _tool(ctx: WorkerCtx, state: WorkerState, call: dict, name: str, raw: str, logs: list, files: list,
+          usage: dict, allowed: set) -> str:
+    """执行一次工具调用，返回给模型的结果（记录写进 logs / files / usage）。"""
+    ctx.emit({"type": "activity", **ctx.base_event, "step": state.get("steps", 0), "phase": "tool", "tool": name,
+              "path": _arg(raw, "path") or _arg(raw, "role")})
+    if call["id"] in (state.get("bad_calls") or []):  # 参数不是合法 JSON：不执行，让模型重新调用
+        result = BAD_ARGS
+        summary = {"name": name, "ok": False}
+        logs.append(summary)
+        ctx.emit({"type": "tool", **ctx.base_event, **summary})
+    elif name not in allowed:  # 只执行这次提供给模型的工具（例如只读讨论时不能写文件）
+        result = f"错误：这次不能使用 {name} 工具"
+        summary = {"name": name, "ok": False}
+        logs.append(summary)
+        ctx.emit({"type": "tool", **ctx.base_event, **summary})
+    elif name in ctx.handlers:
+        try:
+            result = ctx.handlers[name](json.loads(raw or "{}"))
+            ok = not result.startswith("错误")
+        except json.JSONDecodeError as e:
+            result, ok = f"错误：参数不是合法的 JSON（{e}）", False
+        summary = {"name": name, "ok": ok}
+        logs.append(summary)
+        ctx.emit({"type": "tool", **ctx.base_event, **summary})
+        _observe(ctx, summary)
+    elif name in ctx.web_names:
+        result, summary = _call_web(ctx.hub, name, raw)
+        logs.append(summary)
+        ctx.emit({"type": "tool", **ctx.base_event, **summary})
+    elif name == "kb_search":  # 检索公司知识库（只读）
+        result, summary = call_kb(ctx.company, raw)
+        logs.append(summary)
+        ctx.emit({"type": "tool", **ctx.base_event, **summary})
+        _observe(ctx, summary)
+    elif name == "code_agent" and uses_coder(ctx.role_id):
+        try:  # 编码 agent 也会响应暂停：停下后把情况告诉角色，恢复时它自己决定怎么继续
+            result = _delegate_to_coder(ctx.company, ctx.role_id, raw, ctx.emit, ctx.base_event,
+                                        Either(ctx.cancel, *([ctx.stop] if ctx.stop else [])), logs, files, usage)
+        except Cancelled:
+            if ctx.cancel.is_set():
+                raise
+            result = "（编码 agent 被暂停了，这一步还没完成；继续时请检查已经改了哪些文件）"
+    elif name in ("write_file", "edit_file") and ctx.can_write and (refused := ctx.can_write(_arg(raw, "path"), name)):
+        result = f"错误：{refused}"  # 别人的文件不能改（执行任务时）
+        summary = {"name": name, "path": _arg(raw, "path"), "ok": False}
+        logs.append(summary)
+        ctx.emit({"type": "tool", **ctx.base_event, **summary})
+        _observe(ctx, summary)
+    else:
+        result, summary, wrote = execute_tool(ctx.company, ctx.role_id, name, raw)
+        logs.append(summary)
+        ctx.emit({"type": "tool", **ctx.base_event, **summary})
+        _observe(ctx, summary)
+        if wrote:
+            files.append(summary["path"])
+            ctx.emit({"type": "file", "path": summary["path"], "author": ctx.role_id})
+    return result
 
 
 def _observe(ctx: WorkerCtx, summary: dict) -> None:
@@ -362,7 +379,7 @@ def run(company: Company, role_id: str, conversation: list[dict], emit: Callable
                     base_event={"msg_id": msg_id, "channel": channel, "sender": role_id}, cancel=cancel,
                     max_steps=max_steps, stop=stop, listen=listen,
                     tools=[t for t in tools_for(role_id) if not readonly or t["function"]["name"] in READONLY_TOOLS]
-                    + (hub.schemas() if hub else []) + (extra_tools or []),
+                    + (hub.schemas() if hub else []) + ([KB_TOOL] if company.kb else []) + (extra_tools or []),
                     handlers=handlers or {}, hub=hub, web_names={t["name"] for t in hub.tools} if hub else set(),
                     answer_last=answer_last, after_tools=after_tools, pause_on_limit=pause_on_limit,
                     finished=finished, require_finish=require_finish, observe=observe, can_write=can_write,
@@ -372,9 +389,12 @@ def run(company: Company, role_id: str, conversation: list[dict], emit: Callable
     graph = _graph_for(saver)
     payload = Command(resume={"note": resume_note}) if resume_note is not None else {"messages": list(conversation)}
 
+    parent = tracing.current()  # 下面在空的上下文里跑：把链路的"当前步骤"带进去
+
     def go():
-        for _ in graph.stream(payload, cfg, context=ctx, stream_mode="updates"):
-            pass
+        with tracing.use(parent):
+            for _ in graph.stream(payload, cfg, context=ctx, stream_mode="updates"):
+                pass
     # 在空的上下文里运行：外面可能正在运行公司的图，不能让这个图被当成它的子图（共用检查点和事件流）
     try:
         contextvars.Context().run(go)

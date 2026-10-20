@@ -7,6 +7,7 @@ from typing import Callable
 import httpx
 from openai import APIConnectionError, InternalServerError, OpenAI, RateLimitError
 
+from . import tracing
 from .config import LLMConfig
 
 # 流式回调：(类型 "text" 或 "reasoning", 新增的文字)
@@ -101,21 +102,49 @@ class LLM:
         on_delta 里抛出的异常（比如用户点了停止）会中断生成。网络超时、连接中断、限流、服务端错误会自动重试几次，
         仍然失败就暂停等待（见 NetworkGate），恢复后接着重试。
         """
-        attempt, paused_at = 0, None
-        while True:
-            try:
-                reply = self._chat_once(messages, tools, on_delta, json_mode, on_tool_delta)
-                NETWORK.online()
-                return reply
-            except TRANSIENT_ERRORS as e:
-                if attempt < len(RETRY_DELAYS):
-                    self._wait(RETRY_DELAYS[attempt], on_delta)
-                    attempt += 1
-                    continue
-                paused_at = paused_at or time.monotonic()
-                if NETWORK.max_wait is not None and time.monotonic() - paused_at >= NETWORK.max_wait:
-                    raise
-                NETWORK.wait(e, on_delta)
+        last = messages[-1].get("content") if messages else ""
+        with tracing.span(f"模型调用 {self.model}", "llm", **{
+                "gen_ai.operation.name": "chat", "gen_ai.request.model": self.model,
+                "gen_ai.system": str(getattr(getattr(self.client, "base_url", None), "host", "") or ""), "opc.messages": len(messages),
+                "opc.tools": len(tools or []), "opc.json_mode": json_mode,
+                "opc.input_preview": tracing.preview(last or "")}) as span:
+            started, first = time.monotonic(), []
+
+            def mark(fn):  # 记下第一个字（或第一段工具参数）到达的时间：首字延迟
+                def wrapped(*a):
+                    if not first and a and a[-1]:
+                        first.append(time.monotonic())
+                    if fn:
+                        return fn(*a)
+                return wrapped
+            on_delta_t, on_tool_t = mark(on_delta), (mark(on_tool_delta) if on_tool_delta else None)
+            attempt, paused_at = 0, None
+            while True:
+                try:
+                    reply = self._chat_once(messages, tools, on_delta_t, json_mode, on_tool_t)
+                    NETWORK.online()
+                    break
+                except TRANSIENT_ERRORS as e:
+                    if attempt < len(RETRY_DELAYS):
+                        span.set(**{"opc.last_retry_error": f"{type(e).__name__}: {e}"[:200]})
+                        self._wait(RETRY_DELAYS[attempt], on_delta)
+                        attempt += 1
+                        continue
+                    paused_at = paused_at or time.monotonic()
+                    if NETWORK.max_wait is not None and time.monotonic() - paused_at >= NETWORK.max_wait:
+                        raise
+                    NETWORK.wait(e, on_delta)
+            u, calls = getattr(reply, "usage", None), getattr(reply, "tool_calls", None)
+            finish, content = getattr(reply, "finish_reason", None), getattr(reply, "content", None)
+            span.set(**{"gen_ai.usage.input_tokens": getattr(u, "prompt", None),
+                        "gen_ai.usage.output_tokens": getattr(u, "completion", None),
+                        "gen_ai.usage.cached_tokens": getattr(u, "cached", None),
+                        "gen_ai.response.finish_reasons": [finish] if finish else None,
+                        "opc.retries": attempt or None,
+                        "opc.ttft_ms": int((first[0] - started) * 1000) if first else None,
+                        "opc.tool_calls": [c.function.name for c in calls] if calls else None,
+                        "opc.output_preview": tracing.preview(content) if content else None})
+            return reply
 
     @staticmethod
     def _wait(seconds: float, on_delta: DeltaFn | None) -> None:

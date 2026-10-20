@@ -1,7 +1,8 @@
 """向量模型后端：把文字变成向量，用于按意思检索。
 
 三种选择（环境变量 OPC_EMBED_BACKEND）：
-- local：本地模型，用 fastembed 在 CPU 上运行，默认 BAAI/bge-small-zh-v1.5（约 95 MB，第一次使用时下载到 ~/.opc/models）
+- local：本地模型，用 fastembed 在 CPU 上运行，默认 BAAI/bge-small-zh-v1.5（约 95 MB，第一次使用时下载到 ~/.opc/models，
+  可以用 OPC_MODELS_DIR 换位置）
 - api：任何提供 OpenAI 兼容 /embeddings 接口的服务（OPC_EMBED_BASE_URL、OPC_EMBED_API_KEY、OPC_EMBED_MODEL）
 - none：不用向量，只做关键词检索
 不设置时：装了 fastembed 就用 local，否则 none。向量检索不可用时知识库自动退回关键词检索，不会报错。
@@ -29,7 +30,8 @@ class LocalEmbedder(Embedder):
     def __init__(self, model: str = DEFAULT_LOCAL_MODEL, cache_dir: str | None = None):
         self.model_name = model
         self.name = f"local:{model}"
-        self.cache_dir = cache_dir or str(Path(os.getenv("OPC_HOME") or Path.home() / ".opc") / "models")
+        # OPC_MODELS_DIR：模型放在别的盘（C 盘空间紧时）；默认在数据目录的 models/ 下
+        self.cache_dir = cache_dir or os.getenv("OPC_MODELS_DIR") or str(Path(os.getenv("OPC_HOME") or Path.home() / ".opc") / "models")
         self._model = None
 
     def _load(self):

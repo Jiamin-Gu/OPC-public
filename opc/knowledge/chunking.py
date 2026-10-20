@@ -115,9 +115,35 @@ def _merge_small(chunks: list[dict]) -> list[dict]:
         # 相邻的小块合并（中间隔着空行也算相邻），避免配置文件、短段落被切成只有一两行的碎块
         if prev and len(prev["text"]) < MIN_CHARS and len(prev["text"]) + len(c["text"]) <= MAX_CHARS:
             gap = "\n" * max(c["start"] - prev["end"], 1)
-            main = c if len(c["text"]) >= len(prev["text"]) else prev  # 标题和类型取内容多的那一块
+            main = c if len(c["text"]) >= len(prev["text"]) else prev  # 类型取内容多的那一块
+            # 标题两块的都要：只留一个的话，引用出处会指错（答案在"优惠券"一节，出处却写成"金额与计价"）
             out[-1] = {**prev, "end": c["end"], "text": prev["text"] + gap + c["text"],
-                       "title": main["title"] or prev["title"] or c["title"], "kind": main["kind"]}
+                       "title": merge_titles(prev["title"], c["title"]), "kind": main["kind"]}
         else:
             out.append(c)
     return out
+
+
+PAGE = re.compile(r"^第 (\d+)(?:-(\d+))? 页$")
+
+
+def merge_titles(a: str, b: str) -> str:
+    """合并两块的标题：共同的上级标题只写一次，后面的部分并列（"规范 / 一、金额；二、优惠券"）；
+    PDF 的页码合并成范围（"第 2-3 页"）。"""
+    if not a or not b or a == b:
+        return a or b
+    if b.startswith(a + " / "):  # 上级标题的开头一段和第一节合在一起：标题就是那一节的路径
+        return b
+    if a.startswith(b + " / "):
+        return a
+    pa, pb = a.split(" / "), b.split(" / ")
+    k = 0
+    while k < min(len(pa), len(pb)) - 1 and pa[k] == pb[k]:
+        k += 1
+    ta, tb = " / ".join(pa[k:]), " / ".join(pb[k:])
+    ma, mb = PAGE.match(ta), PAGE.match(tb)
+    if ma and mb:
+        tail = f"第 {ma.group(1)}-{mb.group(2) or mb.group(1)} 页"
+    else:
+        tail = ta if ta.endswith(tb) else f"{ta}；{tb}"
+    return " / ".join(pa[:k] + [tail])

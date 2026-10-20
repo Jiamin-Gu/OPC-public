@@ -19,6 +19,8 @@ from .. import coding, effort, model_settings, providers, web_tools
 from ..company import Company, CompanyStore
 from ..engine import Engine
 from ..graph import ALL, build_graph
+from .. import tracing
+from ..knowledge import service as kb_service
 from ..llm import NETWORK
 from ..messages import MessageLog, migrate_legacy, open_sqlite_store
 from ..roles import ROLES, library_info, preset_info
@@ -46,9 +48,6 @@ class Hub:
         self.phase_since: dict[str, float] = {}  # 任务 id -> 进入当前状态的时间，界面显示这一步用了多久
         self._phase: dict[str, str] = {}
         self.role_status: dict[str, dict] = {}
-        self._kbs: dict = {}                    # 公司 id -> 知识库（独立组件，只读公司数据）
-        self._embedder = None                   # 向量模型：第一次用到时加载，所有公司共用
-        self._kb_lock = threading.Lock()
         self._clients: dict[asyncio.Queue, asyncio.AbstractEventLoop] = {}
         self._lock = threading.Lock()
         # 模型服务连不上时角色会原地暂停（见 llm.NetworkGate）：暂停和恢复都推送给浏览器
@@ -202,10 +201,8 @@ class Hub:
             if self.busy:
                 raise ValueError("公司正在执行任务，请先停止")
             self.close_company()
-        with self._kb_lock:
-            kb = self._kbs.pop(company_id, None)
-        if kb:
-            kb.close()  # 先关掉知识库的数据库，否则 Windows 上文件被占用，删不掉公司目录
+        kb_service.close(self.store.dir / company_id)  # 先关掉知识库和链路的数据库，否则 Windows 上删不掉公司目录
+        tracing.close(self.store.dir / company_id)
         self.store.delete(company_id)
         try:
             self.checkpointer.delete_thread(company_id)  # 同时删除这家公司在图里的历史状态
@@ -213,23 +210,15 @@ class Hub:
         except Exception:
             pass
 
-    # ---------- 知识库（独立组件，只读） ----------
+    # ---------- 知识库（角色、规划和网页共用，见 knowledge/service.py） ----------
 
     def knowledge(self):
-        """当前公司的知识库，先增量同步（公司文件区 + 任务记录）。没有打开的公司时返回 None。"""
-        from ..knowledge import open_kb, sync_company
-        from ..knowledge.embedding import default_embedder
+        """当前公司的知识库，先增量同步（公司文件区、资料库、任务记录、指令结论）。没有打开的公司时返回 None。"""
         company = self.company
         if not company:
             return None, {}
-        with self._kb_lock:
-            if self._embedder is None:
-                self._embedder = default_embedder() or False
-            kb = self._kbs.get(company.id)
-            if kb is None:
-                kb = self._kbs[company.id] = open_kb(company, embedder=self._embedder or None)
         state = {"tasks": dict(self.state().get("tasks") or {}), "channels": {"all": self.log.read(ALL)}}
-        return kb, sync_company(kb, company, state)
+        return kb_service.get(company), kb_service.sync(company, state)
 
     # ---------- 处理浏览器消息 ----------
 
@@ -336,19 +325,23 @@ class Hub:
             res = {"change": False, "orders": [], "reply": f"（调度助手出错：{type(e).__name__}）", "usage": {}}
         finally:
             self.broadcast({"type": "triage", "channel": target, "status": "idle"})
-        if (res.get("usage") or {}).get("calls"):
-            self.engine.submit({"type": "usage", "usage": {"planner": res["usage"]}})
-        if target == MANAGER and (res["reply"] or not res["change"]):
-            self._post(MANAGER, new_message("manager", "text", res["reply"] or "收到。"))
-        if res["change"]:
-            text, affected = describe(res["orders"], tasks)
-            by_id = {t["id"]: t for t in tasks}
-            orders = [{**o, "title": by_id[o["task_id"]]["title"], "assignee": by_id[o["task_id"]]["assignee"]}
-                      for o in res["orders"]]
-            self._post(target, new_message("manager", "proposal", text, orders=orders, affected=affected,
-                                           source_id=msg["id"]))
-            return
-        self._route(msg, target, topic)
+        try:
+            if target == MANAGER and (res["reply"] or not res["change"]):
+                self._post(MANAGER, new_message("manager", "text", res["reply"] or "收到。"))
+            if res["change"]:
+                text, affected = describe(res["orders"], tasks)
+                by_id = {t["id"]: t for t in tasks}
+                orders = [{**o, "title": by_id[o["task_id"]]["title"], "assignee": by_id[o["task_id"]]["assignee"]}
+                          for o in res["orders"]]
+                self._post(target, new_message("manager", "proposal", text, orders=orders, affected=affected,
+                                               source_id=msg["id"]))
+                return
+            self._route(msg, target, topic)
+        finally:
+            # 调度助手的用量最后再记：记用量也是交给引擎的一个事件，先交的话 _route 会看到"团队在忙"，
+            # 把一条新指令当成插话（v0.21 修复：上一条指令做完后，下新指令没有反应）
+            if (res.get("usage") or {}).get("calls"):
+                self.engine.submit({"type": "usage", "usage": {"planner": res["usage"]}})
 
     def _post(self, channel: str, msg: dict) -> None:
         self.log.append(channel, msg)
