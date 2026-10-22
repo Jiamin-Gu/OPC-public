@@ -1,0 +1,9 @@
+# 可选：用 NVIDIA 显卡算知识库的向量和重排序（比 CPU 快很多，适合资料很多的时候），设 OPC_EMBED_DEVICE=cuda 启用。
+# 显卡版和 CPU 版的 onnxruntime 不能装在同一个环境里，建议单独建一个虚拟环境：
+#   python -m venv gpu-venv
+#   gpu-venv\Scripts\python -m pip install --upgrade pip
+#   gpu-venv\Scripts\python -m pip install -r requirements.txt -r requirements-kb.txt
+#   gpu-venv\Scripts\python -m pip uninstall -y onnxruntime
+#   gpu-venv\Scripts\python -m pip install -r requirements-kb-gpu.txt
+# 需要 NVIDIA 显卡驱动支持 CUDA 12（nvidia-smi 里看）。下载约 2 GB（CUDA 和 cuDNN 的运行库）。
+onnxruntime-gpu[cuda,cudnn]>=1.21

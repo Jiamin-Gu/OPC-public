@@ -38,7 +38,7 @@ from .changes import (FINISHED_STATUSES, apply_change, cancel_unfinished, dispat
 from .company import Company
 from .config import MAX_REVIEW_ROUNDS
 from .inbox import format_notes
-from . import tracing
+from . import security, tracing
 from .knowledge import service as kb_service
 from .messages import MessageLog
 from .roles import ROLES
@@ -240,6 +240,16 @@ def plan_node(state: CompanyState, runtime: Runtime[Ctx]) -> Command:
                     ctx.company, d["text"], records,
                     exclude=lambda s: s == f"directive:{d['id']}" or s.startswith(f"task:{d['id']}-"))
                 rs.set(**{"opc.hits": len(recalled), "opc.sources": recalled or None})
+                if memory and security.enabled():  # 召回的资料和记录也是外部内容：加边界、检测注入
+                    memory, _ = security.redact(memory)
+                    hits = security.scan(memory)
+                    memory = security.wrap(memory, "知识库召回")
+                    if hits:
+                        rs.set(**{"opc.injection": [h["kind"] for h in hits]})
+                        _post(runtime, ALL, new_message("system", "security", "\n".join(
+                            ["⚠️ 规划时从知识库召回的内容里有像是在给 AI 下指令的文字，按规则没有照做："]
+                            + [f"- {h['why']}：「{h['excerpt']}」" for h in hits]
+                            + ["可以在「知识库」里找到这份资料，确认是否要删除。"]), findings=hits, source="知识库召回"))
         try:
             summary, specs, usage = planner.make_plan(ctx.company, d["text"], state.get("feedback", ""), previous,
                                                       cancel_check, memory=memory)

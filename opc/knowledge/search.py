@@ -5,6 +5,7 @@
 - 中文：没有空格分词，用相邻两个字（二元组）作为词，"退款金额" → 退款、款金、金额。
   不需要词典，对专有名词、新词也有效；单独一个汉字时保留这个字
 """
+import heapq
 import math
 import re
 from collections import Counter
@@ -28,43 +29,55 @@ def tokenize(text: str) -> list[str]:
 
 
 class BM25:
-    """经典 BM25。k1 控制词频饱和，b 控制长度归一化。"""
+    """经典 BM25（k1 控制词频饱和，b 控制长度归一化），用倒排索引：词 → {文档: 词频}。
+
+    检索时只看包含查询词的文档。以前每次检索都把所有文档算一遍：几百块时没感觉，
+    在 10 万段的公开评测集上每次要 0.27 秒（scripts/rag_bench.py），改成倒排索引后约 5 毫秒，见 docs/design.md 决策 27。
+    """
 
     def __init__(self, k1: float = 1.5, b: float = 0.75):
         self.k1, self.b = k1, b
-        self.docs: dict[int, Counter] = {}
+        self.postings: dict[str, dict[int, int]] = {}
         self.lengths: dict[int, int] = {}
-        self.df: Counter = Counter()
+        self.terms: dict[int, tuple[str, ...]] = {}  # 每个文档有哪些词（删除时用）
+        self.total = 0  # 所有文档的长度之和（算平均长度）
 
     def add(self, doc_id: int, text: str) -> None:
+        if doc_id in self.lengths:
+            self.remove(doc_id)
         tf = Counter(tokenize(text))
-        self.docs[doc_id], self.lengths[doc_id] = tf, sum(tf.values())
-        self.df.update(tf.keys())
+        for term, f in tf.items():
+            self.postings.setdefault(term, {})[doc_id] = f
+        length = sum(tf.values())
+        self.lengths[doc_id], self.terms[doc_id] = length, tuple(tf)
+        self.total += length
 
     def remove(self, doc_id: int) -> None:
-        tf = self.docs.pop(doc_id, None)
-        self.lengths.pop(doc_id, None)
-        if tf:
-            self.df.subtract(tf.keys())
+        for term in self.terms.pop(doc_id, ()):
+            docs = self.postings.get(term)
+            if docs is not None:
+                docs.pop(doc_id, None)
+                if not docs:
+                    del self.postings[term]
+        self.total -= self.lengths.pop(doc_id, 0)
 
     def search(self, query: str, k: int, allowed=None) -> list[tuple[int, float]]:
         terms = set(tokenize(query))
-        if not terms or not self.docs:
+        if not terms or not self.lengths:
             return []
-        n, avg = len(self.docs), sum(self.lengths.values()) / len(self.docs)
-        idf = {t: math.log(1 + (n - self.df[t] + 0.5) / (self.df[t] + 0.5)) for t in terms if self.df[t] > 0}
-        scores = []
-        for doc_id, tf in self.docs.items():
-            if allowed is not None and doc_id not in allowed:
+        n, avg = len(self.lengths), self.total / len(self.lengths)
+        k1, b, lengths = self.k1, self.b, self.lengths
+        scores: dict[int, float] = {}
+        for t in terms:
+            docs = self.postings.get(t)
+            if not docs:
                 continue
-            s = 0.0
-            for t, w in idf.items():
-                f = tf.get(t, 0)
-                if f:
-                    s += w * f * (self.k1 + 1) / (f + self.k1 * (1 - self.b + self.b * self.lengths[doc_id] / avg))
-            if s > 0:
-                scores.append((doc_id, s))
-        return sorted(scores, key=lambda x: -x[1])[:k]
+            w = math.log(1 + (n - len(docs) + 0.5) / (len(docs) + 0.5))
+            for doc_id, f in docs.items():
+                if allowed is not None and doc_id not in allowed:
+                    continue
+                scores[doc_id] = scores.get(doc_id, 0.0) + w * f * (k1 + 1) / (f + k1 * (1 - b + b * lengths[doc_id] / avg))
+        return heapq.nlargest(k, scores.items(), key=lambda x: x[1])
 
 
 def rrf(rankings: list[list[int]], k: int = 60, weights: list[float] | None = None) -> dict[int, float]:

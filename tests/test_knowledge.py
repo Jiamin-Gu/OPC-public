@@ -6,7 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from opc.knowledge import KnowledgeBase, task_documents
-from opc.knowledge.base import query_weights
+from opc.knowledge.base import fuse, query_weights
 from opc.knowledge.chunking import chunk_file
 from opc.knowledge.search import BM25, rrf, tokenize
 
@@ -74,6 +74,54 @@ def test_bm25_and_rrf():
     scores = rrf([[1, 2, 3], [3, 1]], weights=[1.0, 1.0])
     assert max(scores, key=scores.get) == 1
     assert query_weights("InvalidFileError 在哪") == (1.0, 0.5) and query_weights("退款怎么处理") == (0.7, 1.0)
+
+
+def test_fuse_weights_and_keep_each_top():
+    """融合：权重大的一路名次更靠前；每一路的第一名一定在前 k 里（keep_top=False 时不保证）；返回完整排序。"""
+    keyword, vector = ["k1", "a", "b", "c"], ["a", "b", "c", "v1"]
+    top, order = fuse(keyword, vector, (1.0, 1.0), 2)
+    assert top == ["a", "k1"]  # 关键词第一名 k1 只出现在一路里，融合分数排第 4，也要保住
+    assert set(order) == {"k1", "a", "b", "c", "v1"}
+    top, _ = fuse(keyword, vector, (1.0, 1.0), 2, keep_top=False)
+    assert top == ["a", "b"]  # 两路都靠前的排在前面，k1 被挤掉
+    top, _ = fuse(["x", "y"], ["y", "x"], (0.3, 1.0), 2, keep_top=False)
+    assert top == ["y", "x"]  # 向量权重大：两路名次相反时听向量的
+    top, _ = fuse(["x", "y"], ["y", "x"], (1.0, 0.3), 2, keep_top=False)
+    assert top == ["x", "y"]
+    assert fuse([], ["v"], (0.7, 1.0), 5)[0] == ["v"]
+
+
+def test_onnx_providers_follow_env_and_fall_back(monkeypatch):
+    """OPC_EMBED_DEVICE=cuda 且 onnxruntime 有 CUDA 时用显卡；没设、没有 CUDA、没装 onnxruntime 时都退回默认（None，用 CPU）。"""
+    import sys
+    import types
+    from opc.knowledge.embedding import onnx_providers
+    fake = types.SimpleNamespace(get_available_providers=lambda: ["CUDAExecutionProvider", "CPUExecutionProvider"],
+                                 preload_dlls=lambda: None)
+    monkeypatch.setitem(sys.modules, "onnxruntime", fake)
+    monkeypatch.delenv("OPC_EMBED_DEVICE", raising=False)
+    assert onnx_providers() is None
+    monkeypatch.setenv("OPC_EMBED_DEVICE", "cuda")
+    assert onnx_providers() == ["CUDAExecutionProvider", "CPUExecutionProvider"]
+    fake.get_available_providers = lambda: ["CPUExecutionProvider"]
+    assert onnx_providers() is None
+    monkeypatch.setitem(sys.modules, "onnxruntime", None)  # 没装：import 失败
+    assert onnx_providers() is None
+
+
+def test_rag_bench_metrics():
+    """公开评测集脚本的指标和 MTEB 的定义一致：nDCG@10、Recall@10/100、MRR@10。"""
+    import importlib.util
+    import math
+    pytest.importorskip("numpy")
+    path = Path(__file__).resolve().parent.parent / "scripts" / "rag_bench.py"
+    spec = importlib.util.spec_from_file_location("rag_bench", path)
+    bench = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(bench)
+    m = bench.metrics(["x", "a", "y", "b"], {"a", "b"})
+    assert m["mrr@10"] == 0.5 and m["recall@10"] == 1.0 and m["recall@100"] == 1.0
+    assert math.isclose(m["ndcg@10"], (1 / math.log2(3) + 1 / math.log2(5)) / (1 + 1 / math.log2(3)))
+    assert bench.metrics(["x"] * 10 + ["a"], {"a"}) == {"ndcg@10": 0.0, "recall@10": 0.0, "recall@100": 1.0, "mrr@10": 0.0}
 
 
 # ---------------------------------------------------------------- 同步与检索
@@ -270,3 +318,44 @@ def test_rerank_reorders_candidates_only_when_asked(tmp_path, monkeypatch):
     assert isinstance(rerank.default_reranker(), rerank.LocalReranker)
     monkeypatch.setenv("OPC_RERANK", "none")
     assert rerank.default_reranker() is None
+
+
+def test_bm25_inverted_index_matches_brute_force():
+    """倒排索引的 BM25 和逐个文档算的原始公式结果一致（包括删除、重复添加之后）。"""
+    import math
+    import random
+    from collections import Counter
+    rng = random.Random(0)
+    words = ["退款", "金额", "到账", "会员", "积分", "优惠券", "订单", "审核", "客服", "规则", "low_stock", "parseMoney"]
+    docs = {i: " ".join(rng.choices(words, k=rng.randint(3, 30))) for i in range(200)}
+    bm = BM25()
+    for i, t in docs.items():
+        bm.add(i, t)
+    for i in range(0, 200, 7):  # 删掉一些、再改写一些
+        bm.remove(i)
+        docs.pop(i)
+    for i in range(1, 200, 11):
+        if i in docs:
+            docs[i] = "退款 到账 " + docs[i]
+            bm.add(i, docs[i])
+
+    def brute(query, k):
+        tfs = {i: Counter(tokenize(t)) for i, t in docs.items()}
+        n, avg = len(tfs), sum(sum(c.values()) for c in tfs.values()) / len(tfs)
+        out = []
+        for i, tf in tfs.items():
+            s = 0.0
+            for term in set(tokenize(query)):
+                df = sum(1 for c in tfs.values() if term in c)
+                f = tf.get(term, 0)
+                if f and df:
+                    idf = math.log(1 + (n - df + 0.5) / (df + 0.5))
+                    s += idf * f * 2.5 / (f + 1.5 * (0.25 + 0.75 * sum(tf.values()) / avg))
+            if s > 0:
+                out.append((i, s))
+        return sorted(out, key=lambda x: -x[1])[:k]
+
+    for q in ("退款到账", "会员积分规则", "low_stock", "优惠券 审核"):
+        got, want = bm.search(q, 10), brute(q, 10)
+        assert [round(s, 9) for _, s in got] == [round(s, 9) for _, s in want]
+        assert {d for d, _ in got} == {d for d, _ in want}

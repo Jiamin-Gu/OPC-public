@@ -12,6 +12,7 @@ def no_real_mcp(monkeypatch, tmp_path_factory):
     monkeypatch.delenv("OPC_MCP_URL", raising=False)
     monkeypatch.setenv("OPC_EMBED_BACKEND", "none")
     monkeypatch.setenv("OPC_RERANK", "none")
+    monkeypatch.setenv("OPC_CODE_SANDBOX", "0")  # 测试不去查 Docker；沙箱另有专门的测试
     # 数据目录用一个还不存在的临时目录：不碰本机的 ~/.opc，也和 CI 的新机器一样（目录要靠程序自己建）
     monkeypatch.setenv("OPC_HOME", str(tmp_path_factory.mktemp("opc") / "home"))
     web_tools.reset()

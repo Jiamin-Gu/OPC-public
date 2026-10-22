@@ -34,7 +34,10 @@ class LocalReranker(Reranker):
     def _load(self):
         if self._model is None:
             from fastembed.rerank.cross_encoder import TextCrossEncoder
-            self._model = TextCrossEncoder(self.model_name, cache_dir=self.cache_dir)
+            from .embedding import onnx_providers
+            providers = onnx_providers()
+            self._model = TextCrossEncoder(self.model_name, cache_dir=self.cache_dir,
+                                           **({"providers": providers} if providers else {}))
         return self._model
 
     def scores(self, query, texts):

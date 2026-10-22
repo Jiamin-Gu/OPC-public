@@ -146,7 +146,8 @@ def test_role_uses_web_tools_when_company_allows(tmp_path):
                    threading.Event(), max_steps=5)
     assert {"fake__web_search", "fake__read_page"} <= set(llm.seen[0][1])
     assert "竞品 A" in llm.seen[1][0][-1]["content"]                     # 搜索结果交给了模型
-    assert llm.seen[2][0][-1]["content"] == "页面打不开"                   # 失败也告诉模型
+    assert "页面打不开" in llm.seen[2][0][-1]["content"]                   # 失败也告诉模型
+    assert llm.seen[2][0][-1]["content"].startswith("<<<外部内容-")         # 外部服务器的返回（包括报错）都标成外部内容
     assert out["tools"] == [{"name": "fake__web_search", "ok": True, "web": True, "query": "记账 app 竞品"},
                             {"name": "fake__read_page", "ok": False, "web": True, "url": "https://bad.example/a"}]
     prompt = system_prompt(company, "marketing")

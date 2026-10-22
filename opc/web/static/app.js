@@ -176,6 +176,10 @@ function renderHome() {
     $("cEffort").value = "standard";
   }
   $("runToggle").hidden = !home.coder?.available;
+  const sbx = home.coder?.sandbox;
+  $("runWhere").innerHTML = !home.coder?.available ? "" : sbx?.ok
+    ? "🛡️ 检测到 Docker：命令在沙箱容器里执行，只看得到公司文件区，默认断网，碰不到你电脑上的其他东西。"
+    : `⚠️ 没有检测到可用的 Docker 沙箱（${esc(sbx?.why || "")}）：命令会直接在你的电脑上执行，只在信任的环境中开启。`;
   const web = home.web || {};  // 联网能力来自 MCP 服务器：连不上时不能勾选
   $("cWeb").disabled = !web.available;
   if (!web.available) $("cWeb").checked = false;
@@ -826,6 +830,7 @@ function renderMessage(m) {
     return node;
   }
   if (m.kind === "event") return el("div", "event", esc(m.text));
+  if (m.kind === "security") return renderSecurity(m);
   if (m.kind === "proposal") return renderProposal(m);
   if (m.kind === "plan") return renderPlan(m);
   if (m.kind === "review") return renderReview(m);
@@ -863,6 +868,24 @@ function renderMessage(m) {
 // ---------- 全公司频道的 CEO 视角：任务进展卡片、成果、阅读视图
 
 // 属于某个任务的过程消息（交付、审查、返工、同事问答、任务事件）：简洁模式下收进任务卡片
+// 防提示词注入的提醒：读到的外部内容里有像指令的文字。可以信任这份内容并让任务重做（这次不拦运行命令和访问网址）
+function renderSecurity(m) {
+  const node = el("div", "security-card");
+  node.innerHTML = `<pre class="security-text"></pre>`;
+  node.querySelector("pre").textContent = m.text;
+  const t = m.task_id && S.tasks[m.task_id];
+  if (t && !m.trusted && !t.trusted) {
+    const btn = el("button", "btn small", "信任并重做");
+    btn.title = "你确认这份外部内容是可信的（比如是你自己写的资料）：这个任务重新执行，这次可以正常运行代码、访问网址";
+    btn.onclick = () => {
+      if (!confirm(`确认这份内容可信，让《${t.title}》重做？这次不会再拦运行命令和访问网址。`)) return;
+      send({ type: "task_action", action: "trust", task_id: t.id });
+    };
+    node.appendChild(btn);
+  }
+  return node;
+}
+
 function isTaskDetail(m) {
   const t = m.task_id ? S.tasks[m.task_id] : null;
   return !!t && m.sender !== "ceo" && m.kind !== "proposal" && (["text", "review", "error", "event"].includes(m.kind) || m.consult);

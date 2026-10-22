@@ -76,7 +76,8 @@ class Hub:
         settings = model_settings.load(self.store.home)
         d = model_settings.default_config(settings)
         return {"type": "home", "companies": self.store.list(), "presets": preset_info(), "library": library_info(),
-                "demo": self.demo, "coder": {"available": coding.AVAILABLE, "version": coding.VERSION},
+                "demo": self.demo, "coder": {"available": coding.AVAILABLE, "version": coding.VERSION,
+                          "sandbox": dict(zip(("ok", "why"), coding.sandbox_status()))},
                 "web": web_tools.status(),
                 "providers": providers.public_list(),
                 "models": model_settings.public(settings), "efforts": effort.public(),
@@ -393,7 +394,7 @@ class Hub:
 
     def task_action(self, action: str, task_id: str, feedback: str) -> None:
         """CEO 在任务卡片上让某个任务返工 / 暂停 / 继续 / 重试：马上生效，受影响、正在工作的同事在当前这一步停下。"""
-        if not self.company or action not in ("rework", "pause", "resume", "retry"):
+        if not self.company or action not in ("rework", "pause", "resume", "retry", "trust"):
             return
         task = next((t for t in self.directive_tasks() if t["id"] == task_id), None)
         if not task:
@@ -406,7 +407,11 @@ class Hub:
             return self.notice("只有失败的任务可以重试")
         if not self.busy:
             self.run_started = time.time()
-        self.engine.change({"kind": action, "task_id": task_id, "feedback": feedback.strip()})
+        if action == "trust":  # 信任读到的外部内容并重做：返工，这次不拦运行命令和访问网址
+            self.engine.change({"kind": "rework", "task_id": task_id, "trusted": True, "feedback": feedback.strip() or
+                                "CEO 确认读到的外部内容可信，请重新完成这个任务（这次可以正常运行代码、访问网址）"})
+        else:
+            self.engine.change({"kind": action, "task_id": task_id, "feedback": feedback.strip()})
         self.broadcast(self.status_event())
 
     # ---------- 引擎的事件 ----------

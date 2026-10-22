@@ -46,7 +46,7 @@
         <label class="run-toggle" id="runToggle" hidden>
           <input type="checkbox" id="cAllowRun" checked>
           <span><b>允许工程师运行代码</b><br>
-            <em class="muted">工程师写代码用的编码 agent 已经装好。勾选后它还会实际运行代码（例如跑测试、试运行程序），危险命令会被拦截；不勾选时只写代码、不运行。命令在你的电脑上执行，只在信任的环境中开启。</em></span>
+            <em class="muted">工程师写代码用的编码 agent 已经装好。勾选后它还会实际运行代码（例如跑测试、试运行程序），危险命令会被拦截；不勾选时只写代码、不运行。<br><span id="runWhere"></span></em></span>
         </label>
         <label class="field">投入档位（只限审查轮数和执行步数，不限 token；到了上限交给你决定）
           <select id="cEffort"></select>

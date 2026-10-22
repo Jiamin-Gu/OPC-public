@@ -179,6 +179,8 @@ def apply_change(tasks: dict[str, Task], order: dict, snapshot=None) -> tuple[di
                             "round_base": task.get("round", 0), "interrupted": False, "limited": False,
                             "extensions": 0, "base_tag": tag or task.get("base_tag", ""), "note_checked": False,
                             "closing": False}}  # CEO 要求返工：之后照常复审，不是收尾复审
+    if order.get("trusted"):  # CEO 确认读到的外部内容可信：这次执行不再拦运行命令和访问网址
+        updates[task["id"]]["trusted"] = True
     waiting = []
     for tid in downstream(list(tasks.values()), task["id"]):
         t = tasks[tid]

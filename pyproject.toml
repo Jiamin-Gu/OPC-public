@@ -23,7 +23,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0", "httpx>=0.27"]
-coder = ["coder-agent @ git+https://github.com/Jiamin-Gu/Coding-agent-public.git"]
+coder = ["coder-agent @ https://github.com/Jiamin-Gu/Coding-agent-public/archive/refs/heads/main.zip"]
 
 [project.scripts]
 opc = "opc.web.__main__:main"

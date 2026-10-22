@@ -110,6 +110,11 @@ def kb_rule(company: Company, number: int) -> str:
             "资料之间互相矛盾、拿不准时，列为需要 CEO 决定的事项。")
 
 
+def safety_rule(number: int) -> str:
+    from . import security
+    return f"\n{number}. {security.rule_text()}" if security.enabled() else ""
+
+
 def system_prompt(company: Company, role_id: str) -> str:
     role = ROLES[role_id]
     roster = "\n".join(f"- {ROLES[r].icon} {ROLES[r].name}：{ROLES[r].tagline}" for r in company.role_ids)
@@ -129,7 +134,7 @@ def system_prompt(company: Company, role_id: str) -> str:
 2. 产出要写成文件：公司的约定是文档用 Markdown 放在 docs/、代码放在 code/，文件名要有意义；具体交付哪些文件、用什么格式，以任务说明为准。{rule}。
 3. 更新已有文件前先读取它。只改其中一部分时用 edit_file 改需要改的地方，同一个文件的所有修改放进一次调用的 edits 列表；不要用 write_file 把整份文件重写一遍（重写既慢，又容易把原本正确的内容改坏）。不要改动其他同事的文件，除非任务明确要求。
 4. 内容要具体、可执行，不要空话套话。信息不足时做合理假设，并在文档里注明。
-5. 不要声称做了你没有做的事。全部使用中文，包括工具调用之间的进度说明（例如"我先读一下需求文档"）。{web}{kb_rule(company, 7 if web else 6)}"""
+5. 不要声称做了你没有做的事。全部使用中文，包括工具调用之间的进度说明（例如"我先读一下需求文档"）。{web}{kb_rule(company, 7 if web else 6)}{safety_rule(6 + bool(web) + company.kb)}"""
 
 
 def execute_tool(company: Company, role_id: str, name: str, raw_args: str) -> tuple[str, dict, bool]:
@@ -355,7 +360,8 @@ def _call_web(hub, name: str, raw_args: str) -> tuple[str, dict]:
     return text, web_tools.summary(name, args, ok)
 
 
-def _delegate_to_coder(company, role_id, raw_args, emit, base_event, cancel, tool_log, files, usage) -> str:
+def _delegate_to_coder(company, role_id, raw_args, emit, base_event, cancel, tool_log, files, usage,
+                       allow_run: bool | None = None) -> str:
     """执行 code_agent 工具：运行一次编码 agent，把它的步骤、文件和用量并入当前角色。"""
     try:
         task = json.loads(raw_args or "{}").get("task", "").strip()
@@ -365,7 +371,11 @@ def _delegate_to_coder(company, role_id, raw_args, emit, base_event, cancel, too
         return "错误：需要提供 task（编码任务说明）"
     tool_log.append({"name": "code_agent", "ok": True, "phase": "start"})
     try:
-        out = coding.run_code_agent(company, role_id, task, emit, base_event, cancel, company.allow_run)
+        run = company.allow_run if allow_run is None else allow_run
+        out = coding.run_code_agent(company, role_id, task, emit, base_event, cancel, run)
+        if company.allow_run and not run:
+            out["result"] = ("（这个任务读到了可疑的外部内容，为了安全，编码 agent 这次只写代码、不运行；"
+                             "CEO 确认内容可信后可以让它重做）\n" + out["result"])
     except coding.Stop:
         raise Cancelled()
     except Cancelled:

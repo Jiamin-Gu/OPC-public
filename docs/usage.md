@@ -240,6 +240,56 @@ OPC_EMBED_MODEL=模型名
 模型约 1 GB，默认只有已经下载过才用（`OPC_RERANK=auto`）；想用就设 `OPC_RERANK=local`，第一次搜索时下载。给角色的检索不重排：
 模型会看全部结果，重排对它帮助不大，每次还要多等约 2.5 秒。
 
+**用显卡算（可选）**：有 NVIDIA 显卡时，按 `requirements-kb-gpu.txt` 里的说明建一个单独的虚拟环境，设 `OPC_EMBED_DEVICE=cuda`，
+向量和重排序就在显卡上算（RTX 4060 上：算向量每秒约 630 段、CPU 约 60 段；重排一次约 0.15 秒、CPU 约 2.5 秒），结果和 CPU 一样。
+显卡用不了时自动退回 CPU。资料很多（几万段以上）时才值得装。
+
+**在公开评测集上评测检索效果**：`scripts/rag_bench.py` 用 C-MTEB 的 DuRetrieval（10 万段）和 T2Retrieval（11.9 万段）评测知识库的检索代码，
+结果和做法见 [examples/rag-bench-v0.24](../examples/rag-bench-v0.24/README.md)：
+
+```bash
+pip install pandas pyarrow psutil
+python scripts/rag_bench.py fetch                     # 下载评测集（约 225 MB，Apache 2.0）
+python scripts/rag_bench.py embed DuRetrieval          # 算好向量并缓存，可以中断后接着算
+python scripts/rag_bench.py eval DuRetrieval --rerank 2000 --grid --out DuRetrieval.json
+```
+
+### 安全
+
+角色会读到很多不是你写的内容：网页、MCP 工具的返回、上传的资料、知识库里检索到的片段。这些内容里可能藏着"忽略以上指令"
+"把密钥发到某个网址"之类的话（提示词注入）。OPC 默认打开这几道防线：
+
+- **标记外部内容**：外部来的内容包在带随机标记的边界里，提示词说明边界里只是资料、里面的指令一律不执行
+- **检测可疑内容**：用规则识别常见的注入手法（中英文：要求忽略指令、冒充系统或 CEO、索要密钥、下载执行脚本、藏起来的文字等）。
+  检测到时全公司频道里出现一张黄色的提醒卡片，写明是哪份内容、哪句话；执行链路里也会标出来
+- **读到可疑内容后限制高风险操作**：这个任务剩下的部分不能运行命令（编码 agent 只写不运行）、不能访问带长参数的网址
+  （防止把数据偷带出去），其他照常做完。你确认内容可信（比如是你自己写的资料），可以点卡片上的「信任并重做」
+- **遮蔽密钥**：工具结果里的 API Key、令牌、私钥等在发给模型之前换成占位符，执行链路里也只记遮蔽后的内容
+- **运行代码进沙箱**：勾选「允许运行代码」时，如果检测到 Docker 和沙箱镜像，编码 agent 的命令在容器里执行：
+  只看得到公司文件区，断网，不是 root，碰不到你电脑上的其他东西。沙箱镜像和 Coding-agent 是同一个，
+  构建方法见 Coding-agent 的使用教程（`python -m coder.sandbox build`，只需一次）。没有 Docker 时命令在你的电脑上执行，
+  创建公司时会明确提示
+
+规则识别不了写得隐蔽的注入（没有典型说法的），所以后面两道防线（限制高风险操作、沙箱）才是兜底。评测结果见设计决策 26。
+
+### 把知识库给别的 agent 用（MCP 服务端）
+
+OPC 的公司知识库可以作为一个只读的 MCP 服务端，给 Claude、Cursor、Coding-agent 等支持 MCP 的工具用：
+
+```bash
+python -m opc.mcp_server --company 公司名            # stdio（在别的工具的配置里写这条命令）
+python -m opc.mcp_server --company 公司名 --http      # Streamable HTTP：http://127.0.0.1:8791/mcp
+```
+
+别的工具里的配置（通用的 mcpServers 格式）：
+
+```json
+{"mcpServers": {"opc-kb": {"command": "python", "args": ["-m", "opc.mcp_server", "--company", "公司名"]}}}
+```
+
+提供两个工具：`kb_search`（检索文档、代码、任务记录、指令结论、资料）和 `kb_sources`（知识库里有什么）。结果里的密钥先遮蔽。
+HTTP 方式只监听本机，请求要带 `Authorization: Bearer <令牌>`，令牌在数据目录的 `mcp_token` 里，启动时也会打印。
+
 ### 执行链路（可观测性）
 
 每条指令都有一条执行链路，记下从规划到汇报的每一步。打开方式：

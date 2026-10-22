@@ -1,3 +1,5 @@
-# 可选：工程师角色用来写代码、运行和测试的编码 agent（需要安装 Git）
+# 可选：工程师角色用来写代码、运行和测试的编码 agent（Coding-agent）
 # 没有安装时，工程师退回到只写代码、不运行的模式
-coder-agent @ git+https://github.com/Jiamin-Gu/Coding-agent-public.git
+# 下载的是 GitHub 生成的源码压缩包，不需要安装 Git；连不上 GitHub 时也可以从本地文件夹装：pip install Coding-agent的文件夹
+# 启动脚本（start.bat / start.sh）会先用 Git 装（装了 Git 的话），不行再用这里的压缩包
+coder-agent @ https://github.com/Jiamin-Gu/Coding-agent-public/archive/refs/heads/main.zip

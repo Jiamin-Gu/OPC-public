@@ -22,10 +22,35 @@ try:
     from coder.tools import ProcessManager, build_tools
     from coder.tools.base import Tool as CoderTool
     from coder.workspace import Workspace
+    try:  # Docker 沙箱（Coding-agent v2.4 起有）
+        from coder.sandbox import DockerSandbox, docker_status
+    except ImportError:
+        DockerSandbox, docker_status = None, None
     AVAILABLE = tuple(int(x) for x in coder.__version__.split(".")[:2]) >= (1, 0)
     VERSION = coder.__version__
 except ImportError:
     AVAILABLE, VERSION, CoderTool = False, None, object
+    DockerSandbox, docker_status = None, None
+
+_sandbox_cache: dict = {"at": 0.0, "status": (False, "")}
+
+
+def sandbox_status() -> tuple[bool, str]:
+    """运行代码能不能放进 Docker 沙箱：(能不能, 说明)。查一次要一两秒（docker info），结果缓存 60 秒。
+    OPC_CODE_SANDBOX=0 时不用沙箱（只用于对比和排查问题）。"""
+    import os
+    if not AVAILABLE or docker_status is None:
+        return False, "装的 Coding-agent 没有沙箱功能（需要 v2.4 以上）"
+    if os.getenv("OPC_CODE_SANDBOX", "1").strip() == "0":
+        return False, "OPC_CODE_SANDBOX=0：没有用沙箱"
+    now = time.monotonic()
+    if now - _sandbox_cache["at"] > 60:
+        try:
+            _sandbox_cache["status"] = docker_status()
+        except Exception as e:
+            _sandbox_cache["status"] = (False, f"检查 Docker 失败：{e}")
+        _sandbox_cache["at"] = now
+    return _sandbox_cache["status"]
 
 CODER_MAX_STEPS = 30
 # 编码 agent 的上下文超过这么多 token 就压缩（它自己的默认值是 6 万）。
@@ -156,16 +181,22 @@ class ProgressUI:
     def error(self, text):
         pass
 
-    def ask_permission(self, tool_name, preview):
-        return "y", ""  # 不会被调用：编码 agent 以自动模式运行，是否能运行命令由工具列表决定
+    def ask_permission(self, tool_name, preview, prefix=None, network=False):
+        # 编码 agent 以自动模式运行，是否能运行命令由工具列表决定；只有沙箱里的命令要联网时会来问：一律拒绝
+        # （没人在旁边确认，联网可能被诱导把代码或密钥发出去；需要的库应该已经装好）
+        if network:
+            return "n", "OPC 里的编码 agent 在沙箱中不能联网：只用已经装好的库，不要下载或安装东西"
+        return "y", ""
 
 
 def run_code_agent(company, role_id: str, task: str, emit, base_event: dict, cancel: threading.Event,
                    allow_run: bool) -> dict:
     """运行一次编码 agent，返回 {result（交给工程师的文字）, files, steps, usage}。"""
     workspace = Workspace(company.files_root)
-    processes = ProcessManager()  # 编码 agent 启动的后台进程（开发服务器等），结束时全部停掉
-    tools = build_tools(workspace, processes)
+    # 运行代码时有 Docker 就进沙箱：容器里只看得到公司文件区，默认断网、非 root，碰不到这台电脑上别的东西
+    sandbox = DockerSandbox(workspace.root) if allow_run and sandbox_status()[0] else None
+    processes = ProcessManager(sandbox)  # 编码 agent 启动的后台进程（开发服务器等），结束时全部停掉
+    tools = build_tools(workspace, processes, sandbox)
     if not allow_run:  # 公司没有允许运行代码：只能读写。所有能执行命令的工具都要去掉，包括后台进程
         for name in RUN_TOOLS:
             tools.pop(name, None)
@@ -180,8 +211,11 @@ def run_code_agent(company, role_id: str, task: str, emit, base_event: dict, can
         agent.run(task + SAFETY_RULES)
     finally:
         processes.stop_all()  # 不留下编码 agent 启动的服务器
+        if sandbox is not None:
+            sandbox.stop()      # 每次编码任务用完就删掉容器
 
-    lines = [f"编码 agent 已结束（调用模型 {agent.steps} 次）。"]
+    where = "（命令在 Docker 沙箱里执行）" if sandbox is not None else ("（命令在本机执行）" if allow_run else "")
+    lines = [f"编码 agent 已结束（调用模型 {agent.steps} 次）{where}。"]
     lines.append("新建或修改的文件：" + ("、".join(ui.files) if ui.files else "无"))
     if ui.commands:
         lines.append("运行过的命令（按顺序）：")

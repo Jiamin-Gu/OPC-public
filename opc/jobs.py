@@ -355,6 +355,25 @@ def write_guard(j: JobCtx, task: Task, rework: bool = False):
     return check
 
 
+def security_guard(j: JobCtx, role_id: str, task: Task | None):
+    """这次执行的防注入状态。读到可疑内容时在全公司频道提醒 CEO（同一个来源只提醒一次），可以选择信任并重做。"""
+    from . import security
+    told: set[str] = set()
+
+    def on_finding(source: str, hits: list[dict]) -> None:
+        if source in told:
+            return
+        told.add(source)
+        who = ROLES[role_id].name if role_id in ROLES else role_id
+        lines = [f"⚠️ {who}读到的内容里有像是在给 AI 下指令的文字，按规则没有照做：{source}"]
+        lines += [f"- {h['why']}：「{h['excerpt']}」" for h in hits]
+        if not (task or {}).get("trusted"):
+            lines.append("这个任务接下来不运行命令、不访问带长参数的网址，其他照常完成。内容确认可信的话，可以点「信任并重做」。")
+        j.post(ALL, new_message("system", "security", "\n".join(lines), task_id=(task or {}).get("id"),
+                                findings=hits, source=source, trusted=bool((task or {}).get("trusted"))))
+    return security.Guard(trusted=bool((task or {}).get("trusted")), on_finding=on_finding)
+
+
 def run_work(j: JobCtx) -> dict:
     task, payload = j.task, j.payload()
     view = payload["task"]
@@ -376,6 +395,7 @@ def run_work(j: JobCtx) -> dict:
         conversation, note = [{"role": "user", "content": brief}], None
     collab = Collab(j, role_id, task)
     deliver = Deliver(j, task, view)
+    guard = security_guard(j, role_id, task)
     tools = ([REPORT_TOOL] if collab.upstream() else []) + [ask_tool(j.company, role_id, j.asks), FINISH_TOOL]
     done = {"type": "job_done", "job": j.job, "kind": "work", "task_id": task["id"]}
     try:
@@ -384,7 +404,7 @@ def run_work(j: JobCtx) -> dict:
                        extra_tools=tools, handlers={"report_upstream_issue": collab.report, "ask_colleague": collab.ask,
                                                     "finish_task": deliver},
                        after_tools=collab.flush, pause_on_limit=True, finished=deliver.finished, require_finish=True,
-                       observe=deliver.observe, can_write=write_guard(j, task, rework))
+                       observe=deliver.observe, can_write=write_guard(j, task, rework), guard=guard)
     except Cancelled:
         return {**done, "cancelled": True}
     except Exception as e:  # 某个角色调用失败（比如密钥错误）不影响其他并行的角色
@@ -586,7 +606,8 @@ def run_review(j: JobCtx) -> dict:
                        j.max_role_steps, listen=j.inbox.listener(reviewer, {m["id"] for m in notes}),
                        extra_tools=[REVIEW_TOOL], handlers={"submit_review": guard}, stop=j.stop, saver=j.saver,
                        readonly=True, finished=guard.finished, observe=guard.observe,  # 审查只看不改：结论用 submit_review 提交
-                       require_finish=True, finish_tool="submit_review")  # 没提交就想结束时提醒，最后一步只能提交
+                       require_finish=True, finish_tool="submit_review",  # 没提交就想结束时提醒，最后一步只能提交
+                       guard=security_guard(j, reviewer, task))
     except Cancelled:
         return {**done, "cancelled": True}
     except Exception as e:  # 审查人调用失败：不卡住流程，交给 CEO 裁决
@@ -813,7 +834,8 @@ def run_chat(j: JobCtx) -> dict:
     done = {"type": "chat_done", "job": j.job, "role": role_id}
     try:
         out = run_role(j.company, role_id, conversation, j.emit, msg_id, role_id, j.cancel, j.max_role_steps,
-                       listen=j.inbox.listener(role_id, set()), saver=j.saver, readonly=bool(j.topic))
+                       listen=j.inbox.listener(role_id, set()), saver=j.saver, readonly=bool(j.topic),
+                       guard=security_guard(j, role_id, None))
     except Cancelled:
         return {**done, "cancelled": True}
     except Exception as e:

@@ -51,6 +51,7 @@ class KnowledgeBase:
         self.dir.mkdir(parents=True, exist_ok=True)
         self.embedder: Embedder | None = default_embedder() if embedder is _DEFAULT else embedder
         self.reranker = reranker      # 重排序模型（rerank.py），None 表示不重排
+        self._matrix = None           # 所有向量拼成的矩阵和对应的块 id：向量有变化时作废，下次检索时重建
         self.rerank_error = ""
         self.vector_error = ""  # 向量模型出错时记下原因，检索退回关键词
         self.load_errors: dict[str, str] = {}  # 资料解析失败或没有文字的文件：{source: 原因}
@@ -69,6 +70,7 @@ class KnowledgeBase:
         current = self.embedder.name if self.embedder else ""
         if stored != current:  # 换了向量模型：旧向量不能和新查询比较，全部作废，同步时重新生成
             self.db.execute("UPDATE chunks SET vector = NULL")
+            self._matrix = None
             self._set_meta("embedder", current)
             self.db.commit()
         for row in self.db.execute('SELECT id, source, start, "end", kind, title, text, vector FROM chunks'):
@@ -81,6 +83,7 @@ class KnowledgeBase:
         if vector is not None:
             v = np.frombuffer(vector, dtype=np.float32)
             self.vectors[cid] = v / (np.linalg.norm(v) or 1.0)
+            self._matrix = None
 
     def _meta(self, key: str) -> str | None:
         row = self.db.execute("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
@@ -93,6 +96,7 @@ class KnowledgeBase:
         for (cid,) in self.db.execute("SELECT id FROM chunks WHERE source = ?", (source,)).fetchall():
             self.chunks.pop(cid, None)
             self.vectors.pop(cid, None)
+            self._matrix = None
             self.bm25.remove(cid)
         self.db.execute("DELETE FROM chunks WHERE source = ?", (source,))
         self.db.execute("DELETE FROM sources WHERE source = ?", (source,))
@@ -123,6 +127,7 @@ class KnowledgeBase:
             arr = np.asarray(v, dtype=np.float32)
             self.db.execute("UPDATE chunks SET vector = ? WHERE id = ?", (arr.tobytes(), cid))
             self.vectors[cid] = arr / (np.linalg.norm(arr) or 1.0)
+        self._matrix = None
         return len(todo)
 
     @staticmethod
@@ -251,13 +256,7 @@ class KnowledgeBase:
             elif mode == "vector":
                 ranked = vector[:k]
             else:
-                kw_weight, vec_weight = query_weights(query)
-                fused = rrf([keyword, vector], weights=[kw_weight, vec_weight])
-                order = sorted(fused, key=lambda c: -fused[c])
-                # 每一路的第一名都保证出现在结果里：一路非常确定的结果，不应该被两路都"还行"的结果挤掉
-                must = list(dict.fromkeys(keyword[:1] + vector[:1]))
-                rest = [c for c in order if c not in must][:max(k - len(must), 0)]
-                ranked = sorted(must + rest, key=order.index)[:k]
+                ranked, order = fuse(keyword, vector, query_weights(query), k)
             scores = {}
             if mode == "hybrid" and rerank and self.reranker:
                 pool = (order if vector else keyword)[:RERANK_POOL]
@@ -293,12 +292,19 @@ class KnowledgeBase:
             self.vector_error = f"{type(e).__name__}: {e}"
             return []
         q /= np.linalg.norm(q) or 1.0
-        ids = [c for c in self.vectors if allowed is None or c in allowed]
-        if not ids:
+        if self._matrix is None or self._matrix[2] != len(self.vectors):
+            all_ids = list(self.vectors)
+            self._matrix = (all_ids, np.stack([self.vectors[c] for c in all_ids]), len(self.vectors))
+        all_ids, mat, _ = self._matrix
+        sims = mat @ q
+        if allowed is not None:
+            keep = np.fromiter((c in allowed for c in all_ids), dtype=bool, count=len(all_ids))
+            sims = np.where(keep, sims, -np.inf)
+            n = min(n, int(keep.sum()))
+        if n <= 0:
             return []
-        sims = np.stack([self.vectors[c] for c in ids]) @ q
-        order = np.argsort(-sims)[:n]
-        return [ids[i] for i in order]
+        top = np.argpartition(-sims, n - 1)[:n] if n < len(sims) else np.arange(len(sims))
+        return [all_ids[i] for i in top[np.argsort(-sims[top])] if np.isfinite(sims[i])]
 
     def get(self, chunk_id: int) -> dict | None:
         with self.lock:
@@ -319,9 +325,22 @@ class KnowledgeBase:
 IDENTIFIER = re.compile(r"\b(?:[A-Za-z0-9]+_[A-Za-z0-9_]+|[a-z]+[A-Z][A-Za-z0-9]*|[A-Z][a-z0-9]+[A-Z][A-Za-z0-9]*)\b")
 
 
+def fuse(keyword: list, vector: list, weights: tuple[float, float], k: int, keep_top: bool = True) -> tuple[list, list]:
+    """混合检索的融合：两路名次用加权的倒数排名融合（RRF）合并，再保证每一路的第一名出现在前 k 里
+    （一路非常确定的结果，不应该被两路都"还行"的结果挤掉）。返回 (前 k 个, 融合后的完整排序)。
+    keep_top=False 不做这一步，只给评测对比用。知识库检索和公开评测集上的评测（scripts/rag_bench.py）用的是同一个函数。"""
+    fused = rrf([keyword, vector], weights=list(weights))
+    order = sorted(fused, key=lambda c: -fused[c])
+    position = {c: i for i, c in enumerate(order)}
+    must = list(dict.fromkeys(keyword[:1] + vector[:1])) if keep_top else []
+    rest = [c for c in order if c not in must][:max(k - len(must), 0)]
+    return sorted(must + rest, key=position.__getitem__)[:k], order
+
+
 def query_weights(query: str) -> tuple[float, float]:
     """两路检索的权重 (关键词, 向量)。查询里有代码标识符（low_stock、parseMoney、InvalidFileError）时，
-    要找的是精确出现这个名字的地方，更信关键词；纯自然语言的提问更信向量（按意思找）。"""
+    要找的是精确出现这个名字的地方，更信关键词；纯自然语言的提问更信向量（按意思找）。
+    自然语言的 0.7 是两种数据之间的折中（决策 27）：公开评测集上关键词弱，0.3 更好；OPC 自己的 38 题上关键词强，0.3 反而略差。"""
     return (1.0, 0.5) if IDENTIFIER.search(query) else (0.7, 1.0)
 
 
