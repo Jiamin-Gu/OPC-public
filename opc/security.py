@@ -105,13 +105,19 @@ RULES = [
 
 
 QUOTES = "\"'“”‘’「」『』《》"
+# 同事写的内容（公司文件区的文件、运行命令的输出）不查这两类：代码项目的日志、README、测试脚本里写着
+# rm -rf、curl … | sh、长的 base64 再正常不过（v1.0 验收时编码 agent 的验证日志里 "rm -rf /tmp/lt" 被当成注入，
+# 测试因此不能运行测试）。这两类针对的是外部内容让 AI 去执行命令，命令执行另有沙箱兜底；下指令的说法照样查
+INTERNAL_SKIP = {"execute", "encoded"}
 
 
-def scan(text: str) -> list[dict]:
-    """返回命中的规则：[{kind, why, excerpt}]（同一类只报一次）。
+def scan(text: str, internal: bool = False) -> list[dict]:
+    """返回命中的规则：[{kind, why, excerpt}]（同一类只报一次）。internal：同事写的内容，不查 INTERNAL_SKIP 里的类别。
     引号里的不算：文档里讨论注入时会引用"忽略之前的指令"这样的话（角色库的安全类角色就有），那是在说它，不是在下指令。"""
     out, text = [], text or ""
     for kind, why, pattern in RULES:
+        if internal and kind in INTERNAL_SKIP:
+            continue
         for m in pattern.finditer(text):
             if m.start() > 0 and text[m.start() - 1] in QUOTES and kind in ("override", "role", "exfiltrate"):
                 continue
@@ -162,8 +168,8 @@ class Guard:
     findings: list = field(default_factory=list)  # [{source, kind, why, excerpt}]
     lock: threading.Lock = field(default_factory=threading.Lock)
 
-    def inspect(self, text: str, source: str) -> list[dict]:
-        hits = scan(text)
+    def inspect(self, text: str, source: str, internal: bool = False) -> list[dict]:
+        hits = scan(text, internal)
         if hits:
             with self.lock:
                 self.tainted = True
@@ -176,6 +182,10 @@ class Guard:
             return None
         if tool == "code_agent":
             return None  # 编码 agent 照常写代码，但不能运行（由调用方降级为只写，见 run_code_agent 的 allow_run）
+        if tool == "run_command":
+            return ("这个任务读到了可疑的内容（见上面的安全提醒），为了安全，现在不能运行命令。"
+                    "能根据读到的代码和同事交回的运行结果完成的就继续，没有运行验证的地方在结论里写明\"需要运行验证\"；"
+                    "CEO 确认内容可信后可以信任并重做")
         if tool in web_names:
             for value in _strings(args):
                 for url in URL.findall(value):

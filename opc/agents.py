@@ -75,11 +75,20 @@ def uses_coder(role_id: str) -> bool:
     return ROLES[role_id].can_code and coding.AVAILABLE
 
 
+def runs_tests(company: Company, role_id: str) -> bool:
+    """测试角色在公司允许运行代码、装了 Coding-agent（用它的命令工具和沙箱）时，有 run_command 运行测试。"""
+    return ROLES[role_id].can_test and company.allow_run and coding.AVAILABLE
+
+
 def tools_for(role_id: str) -> list[dict]:
     return TOOLS + [coding.CODE_TOOL] if uses_coder(role_id) else TOOLS
 
 
 def code_rule(company: Company, role_id: str) -> str:
+    if runs_tests(company, role_id):
+        return ("实现代码不是你的职责，但你可以写测试（测试文件放在 tests/ 下，用 write_file 写），用 run_command 运行测试、"
+                "核实同事说的\"测试通过\"（命令在 Docker 沙箱或本机运行，不能联网、不能安装依赖）。结论要附上运行的命令和退出码；"
+                "发现的问题如实报告（审查时退回，执行任务时写进测试报告和汇报），不要自己去改实现代码")
     if not ROLES[role_id].can_code:
         return "写代码不是你的职责"
     if not uses_coder(role_id):

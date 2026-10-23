@@ -297,3 +297,14 @@ def test_cached_tokens_reads_both_formats():
     assert cached_tokens(SimpleNamespace(prompt_tokens_details=SimpleNamespace(cached_tokens=7168))) == 7168
     assert cached_tokens(SimpleNamespace(prompt_tokens_details={"cached_tokens": 12})) == 12
     assert cached_tokens(SimpleNamespace()) == 0
+
+
+def test_list_files_skips_caches(tmp_path):
+    """运行代码和测试产生的缓存不是产出，不显示在成果里（v1.0 验收时 .pyc 出现在了成果列表里）。"""
+    from opc.company import CompanyStore
+    company = CompanyStore(tmp_path / "home").create("测试", "x", [{"id": "pm"}])
+    for rel in ("code/a.py", "code/__pycache__/a.cpython-312.pyc", "code/.pytest_cache/v/x", "b.pyc"):
+        p = company.files_root / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text("x", encoding="utf-8")
+    assert [f["path"] for f in company.list_files()] == ["code/a.py"]

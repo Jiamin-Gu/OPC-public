@@ -474,3 +474,21 @@ code, pre, textarea { font-variant-ligatures: none; }
 .fa-head .btn { padding: 1px 8px; font-size: 12px; }
 .h-now { font-size: 12px; color: var(--accent); display: flex; align-items: center; gap: 6px; margin-top: 2px; }
 .h-now:empty { display: none; }
+
+/* 编辑计划 */
+.pe-list { display: flex; flex-direction: column; gap: 10px; }
+.pe-task { border: 1px solid var(--border); border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 8px; background: var(--surface-2); }
+.pe-head { display: flex; align-items: center; gap: 8px; }
+.pe-head b { color: var(--text-2); min-width: 1.2em; }
+.pe-task input.pe-title { flex: 1; font-weight: 600; }
+.pe-task input, .pe-task select, .pe-task textarea { border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; background: var(--surface); color: var(--text); font: 13px var(--sans); }
+.pe-task textarea { resize: vertical; width: 100%; box-sizing: border-box; }
+.pe-task label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-2); flex: 1; min-width: 0; }
+.pe-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.pe-row > label { min-width: 200px; }
+.pe-deps { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: var(--text-2); align-items: center; }
+.pe-deps label { flex-direction: row; align-items: center; gap: 4px; flex: none; color: var(--text); }
+.pe-note, .pe-err { font-size: 12px; padding: 6px 14px 0; }
+.pe-note { color: var(--text-2); }
+.pe-err { color: #c62828; }
+.pe-note:empty, .pe-err:empty { display: none; }

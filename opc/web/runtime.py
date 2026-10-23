@@ -15,7 +15,7 @@ import time
 
 from langgraph.checkpoint.sqlite import SqliteSaver
 
-from .. import coding, effort, model_settings, providers, web_tools
+from .. import coding, effort, model_settings, planner, providers, web_tools
 from ..company import Company, CompanyStore
 from ..engine import Engine
 from ..graph import ALL, build_graph
@@ -241,6 +241,8 @@ class Hub:
             self.resolve_proposal(str(msg.get("channel", "")), str(msg.get("id", "")), str(msg.get("action", "")))
         elif kind == "review":
             self.resolve_review(str(msg.get("action", "")), str(msg.get("feedback", "")))
+        elif kind == "plan_edit":
+            self.edit_plan(msg.get("tasks"), bool(msg.get("approve")))
         elif kind == "resume_run":
             if self.unfinished and self.engine:
                 self.unfinished = False
@@ -391,6 +393,19 @@ class Hub:
                 self._submit({"type": "plan_decision", "action": action, "feedback": feedback})
         elif action in ("accept", "rework", "drop"):
             self._submit({"type": "decision", "task_id": review["task_id"], "action": action, "feedback": feedback})
+
+    def edit_plan(self, rows, approve: bool) -> None:
+        """CEO 审批时直接编辑计划：先校验，有错马上告诉 CEO（编辑窗口不关），没错交给调度图应用。"""
+        review = self.review
+        if not review or review["type"] != "plan_review":
+            return self.notice("没有等待审批的计划")
+        tasks = {t["id"]: t for t in self.directive_tasks()}
+        try:
+            planner.edit_plan(rows, [tasks[i] for i in review["task_ids"] if i in tasks], self.company.role_ids)
+        except planner.PlanError as e:
+            return self.broadcast({"type": "plan_edit_error", "error": str(e)})
+        self.broadcast({"type": "plan_edit_ok"})
+        self._submit({"type": "plan_edit", "tasks": rows, "approve": approve})
 
     def task_action(self, action: str, task_id: str, feedback: str) -> None:
         """CEO 在任务卡片上让某个任务返工 / 暂停 / 继续 / 重试：马上生效，受影响、正在工作的同事在当前这一步停下。"""

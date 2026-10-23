@@ -4,7 +4,7 @@
 
 基于 **LangGraph** 的多角色 AI 协作平台。你是 CEO：选好团队成员，给全公司下一条指令，规划助手把它拆成带依赖关系的任务，产品经理、工程师、设计师、测试等角色 agent 并行执行、互相审查，产出需求文档、技术方案、代码和测试计划。执行中你随时可以插话、让某个任务返工，下游会自动跟上。
 
-**当前版本：v0.24.1** · [更新记录](CHANGELOG.md) · [使用教程](docs/usage.md) · [架构与设计决策](docs/design.md) · [真实运行示例](examples/README.md)
+**当前版本：v1.0.0** · [更新记录](CHANGELOG.md) · [使用教程](docs/usage.md) · [架构与设计决策](docs/design.md) · [真实运行示例](examples/README.md)
 
 ## 亮点
 
@@ -76,7 +76,7 @@ python -m opc.web           # 加 --demo 进入演示模式（假模型，不需
 
 ```bash
 pip install pytest
-python -m pytest            # 233 个测试，用假模型，不调用 API
+python -m pytest            # 250 个测试，用假模型，不调用 API
 ```
 
 - **CI**：每次推送和 PR，GitHub Actions 在 Ubuntu（Python 3.10 / 3.12 / 3.13）和 Windows（Python 3.12 / 3.13）上跑全部测试（`.github/workflows/tests.yml`）

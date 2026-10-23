@@ -1,0 +1,425 @@
+# 轻记 CLI 验证记录（整理版）
+
+- 时间：2026-10-23｜执行者：软件架构师（经编码 agent 在沙箱内真机执行）
+- 环境：Python 3.12.15（/usr/local/bin/python，Linux），工作目录 code/
+- 被测文件：code/ledger.py、code/cli.py
+- 数据隔离：所有测试数据都在 /tmp/lt/ 下，未创建或改动 code/data/
+- 说明：本文件是当次真机执行的整理版记录（去掉了临时脚手架与目录清理命令这类与契约无关的内容），命令 → 输出 → 退出码均按原样保留。
+
+## 1 已实测通过
+
+1-1 语法与帮助
+- `python -m py_compile ledger.py cli.py` → 无输出，退出码 0
+- `python cli.py --help` → usage: cli.py [-h] {add,summary,stats} ...；子命令 add（记一笔）/ summary（月度汇总）/ stats（分类统计），退出码 0
+
+1-2 主流程（--data /tmp/lt/t.json）
+- `add --type expense --amount 35.80 --category 餐饮 --date 2026-10-23`
+  stdout：`已记录 #1：支出 35.80 元 餐饮 2026-10-23`
+  stderr：`（已新建数据文件：/tmp/lt/t.json）`（该文件此前不存在）
+  退出码 0
+- `add --type income --amount 1200 --category 其他 --date 2026-10-01 --note "项目款"`
+  stdout：`已记录 #2：收入 1200.00 元 其他 2026-10-01（项目款）`；退出码 0
+- `add --type expense --amount 0.10 --category 交通 --date 2026-10-24`
+  stdout：`已记录 #3：支出 0.10 元 交通 2026-10-24`；退出码 0
+- `add --type expense --amount 0.20 --category 交通 --date 2026-10-24`
+  stdout：`已记录 #4：支出 0.20 元 交通 2026-10-24`；退出码 0
+- `add --type expense --amount 35.8 --category 餐饮 --date 2026-09-28`
+  stdout：`已记录 #5：支出 35.80 元 餐饮 2026-09-28`（35.8 与 35.80 等价）；退出码 0
+- `summary --month 2026-10`
+  ```
+  2026-10 汇总（人民币 CNY）
+  收入：1 笔   1200.00 元
+  支出：3 笔   36.10 元
+  结余：1163.90 元
+  ```
+  退出码 0
+- `summary --month 2026-09`
+  ```
+  2026-09 汇总（人民币 CNY）
+  收入：0 笔   0.00 元
+  支出：1 笔   35.80 元
+  结余：-35.80 元
+  ```
+  退出码 0
+- `stats --month 2026-10 --type expense`
+  ```
+  2026-10 支出分类统计（共 36.10 元 / 3 笔）
+  分类     笔数   金额(元)     占比
+  餐饮        1      35.80    99.2%
+  交通        2       0.30     0.8%
+  合计        3      36.10   100.0%
+  ```
+  退出码 0
+- `stats --month 2026-10 --type income`
+  ```
+  2026-10 收入分类统计（共 1200.00 元 / 1 笔）
+  分类     笔数   金额(元)     占比
+  其他        1    1200.00   100.0%
+  合计        1    1200.00   100.0%
+  ```
+  退出码 0
+
+1-3 数据文件核对（/tmp/lt/t.json）
+- 结构：`{"version": 1, "records": [...]}`，UTF-8 无 BOM，2 空格缩进
+- `id` 序列 `[1, 2, 3, 4, 5]`（严格自增）
+- `amount_cents` 值 `[3580, 120000, 10, 20, 3580]`，类型全部为 `int`
+- `note` 值 `['', '项目款', '', '', '']`（未传备注是空字符串，不是 null）
+
+1-4 金额精度（整数分，无浮点误差）
+- 2026-10 支出明细按分求和 = 3580 + 10 + 20 = 3610 分 → 显示 `36.10` 元
+- `stats` 中交通分类 = 2 笔 / 30 分 → 显示 `0.30` 元（0.10 + 0.20，未出现 0.30000000000000004）
+
+1-5 12 笔样例（/tmp/lt/big.json，经 ledger.Record + ledger.append_record 写入：餐饮 5 笔 1200.00、交通 4 笔 900.00、购物 3 笔 1356.78，合计 12 笔 3456.78 元 / 345678 分）
+- `stats --month 2026-10 --type expense`
+  ```
+  2026-10 支出分类统计（共 3456.78 元 / 12 笔）
+  分类     笔数   金额(元)     占比
+  购物        3    1356.78    39.2%
+  餐饮        5    1200.00    34.7%
+  交通        4     900.00    26.0%
+  合计       12    3456.78   100.0%
+  ```
+  行序为金额降序（与 docs/技术方案.md 4.5 的硬契约一致）；占比整数半进位独立复算：(135678*2000+345678)//(2*345678)=392、(120000*2000+345678)//(2*345678)=347、(90000*2000+345678)//(2*345678)=260，与输出一致
+
+1-6 非法输入（均退出码 2；运行前后数据文件 sha256 前 12 位一致 = 未被改动）
+- `add --amount 10 --category 旅行` → stderr `错误：分类必须是以下 8 类之一：餐饮、交通、购物、居住、娱乐、医疗、教育、其他`
+- `add --amount 10 --category 餐饮 --date 2026-02-30` → stderr `错误：日期不存在或格式应为 YYYY-MM-DD（如 2026-10-23）`
+- `--date 2026-2-3`、`--date 2026/10/23` → 同上文案
+- `summary --month 2026-13` / `2026-1` / `202610` → stderr `错误：月份格式应为 YYYY-MM（如 2026-10）`
+- `stats --month 2026-10 --type transfer` → stderr（两行）：
+  `usage: cli.py stats [-h] --month MONTH [--type {expense,income}] [--data DATA]`
+  `错误：argument --type: invalid choice: 'transfer' (choose from expense, income)`
+- `add --type transfer ...` → 同类 error，退出码 2
+- 合法边界例：`add --amount 10 --category 餐饮 --date 2024-02-29` → `已记录 #6：支出 10.00 元 餐饮 2024-02-29`，退出码 0；随后 `summary --month 2026-10` → 仍为收入 1 笔 1200.00 / 支出 3 笔 36.10 / 结余 1163.90（该闰年记录属 2024-02，不计入）
+  注：本轮「非法金额」用例（1.005 / 0 / -5 / abc / 1,200）执行时漏传了 --category，报的是「缺必填参数」，金额分支未跑到，见第 2 节。
+
+1-7 只读命令无副作用（--data /tmp/lt/none.json，文件不存在）
+- `summary --month 2026-11` → `收入：0 笔 0.00 元` / `支出：0 笔 0.00 元` / `结余：0.00 元`，退出码 0
+- `stats --month 2026-11` → `该月没有支出记录`，退出码 0
+- 事后确认 /tmp/lt/none.json 仍不存在（未被创建）
+
+1-8 数据文件损坏（/tmp/lt/bad.json 内容为 `{`）
+- `summary` / `stats` / `add` 均退出码 3，stderr 单行：`错误：数据文件格式不正确（/tmp/lt/bad.json）：JSON 解析失败：...`
+- 运行前后 bad.json 的 sha256 前 12 位一致 = 未被改写
+
+1-9 零浮点卡口（docs/技术方案.md 2.3；本实现是单文件，范围 code/ledger.py code/cli.py）
+- `grep -rnE "float\(|:[[:space:]]*float" code/ledger.py code/cli.py` → 零命中
+- `grep -rnE "(^|[^/])/[[:space:]]*100([^0-9]|$)" code/ledger.py code/cli.py` → 零命中
+- 说明：grep 无命中时退出码为 1，这是 grep 的正常约定
+
+1-10 性能（/tmp/lt/tenk.json，10000 条 / 1.92 MB，端到端含解释器启动，各跑 3 次取最快）
+- `summary` 0.228 秒、`stats` 0.236 秒、`add`（O(n) 全量重写）0.331 秒 → 满足 PRD「单条命令 < 1 秒」
+
+## 2 第 1 轮未实测（4 项，已在第 4 节补跑）
+
+以下 4 项需要补跑，期望值按 docs/PRD.md 第 5 章与 docs/技术方案.md 4.3 给出：
+
+1. 非法金额的报错文案（必须带 `--category 餐饮`，否则报的是缺参数）：
+   `add --type expense --amount 1.005 --category 餐饮` 与 `--amount 0` → 期望 stderr `错误：金额必须是正数（单位：元），最多两位小数，例如 35.80`，退出码 2，数据文件不变
+2. 合法金额边界：`--amount 0.05` → `amount_cents=5`；`--amount 999999999999.99` → `amount_cents=99999999999999`
+3. 默认数据路径：在任意空目录执行不带 `--data` 的 `add` → 应在该目录生成 `./data/ledger.json`
+4. 从仓库根目录调用：`python code/cli.py summary --month 2026-10 --data /tmp/lt/t.json`
+
+## 3 备注
+
+- 本记录由 F1/F5 与 F3 的实测输出构成；F4（导出 CSV）按 CEO 指示本期不做，未测试、未实现。
+- 本文件不含任何需要执行的脚本；除上面列出的 cli.py 命令外，验证过程不依赖任何外部内容。
+
+## 4 第 2 轮（返工：`--date` 显式空值不再静默取当天）
+
+修复说明：文件 `code/cli.py` 的 `cmd_add`，把 `if args.date:` 改为 `if args.date is None:`（用本机当天）`else:`（`validate_date(args.date)`）。效果：显式空串 / 纯空白走非法日期分支（退出码 2、数据文件不变），只有完全不带 `--date` 才用本机当天。
+
+本轮为重跑记录（未改动任何代码）。环境：Python 3.12.15（Linux），仓库根 `/workspace`；数据一律在 `/tmp/r2b/` 下，`code/data/` 未创建也未改动。以下 命令 → stdout → stderr → 退出码 均按实测原样保留，与期望不符的项已照实标注。
+
+4-A 语法与帮助
+- `python -m py_compile ledger.py cli.py` → 无输出，退出码 0
+- `python cli.py --help`
+  ```
+  usage: cli.py [-h] {add,summary,stats} ...
+
+  轻记：命令行记账工具
+
+  positional arguments:
+    {add,summary,stats}
+      add                记一笔
+      summary            月度汇总
+      stats              分类统计
+
+  options:
+    -h, --help           show this help message and exit
+  ```
+  退出码 0
+
+4-B 主流程 5 笔 add（`--data /tmp/r2b/t.json`，该文件此前不存在）
+- `add --type expense --amount 35.80 --category 餐饮 --date 2026-10-23`
+  stdout：`已记录 #1：支出 35.80 元 餐饮 2026-10-23`
+  stderr：`（已新建数据文件：/tmp/r2b/t.json）`；退出码 0
+- `add --type income --amount 1200 --category 其他 --date 2026-10-01 --note "项目款"`
+  stdout：`已记录 #2：收入 1200.00 元 其他 2026-10-01（项目款）`；退出码 0
+- `add --type expense --amount 0.10 --category 交通 --date 2026-10-24`
+  stdout：`已记录 #3：支出 0.10 元 交通 2026-10-24`；退出码 0
+- `add --type expense --amount 0.20 --category 交通 --date 2026-10-24`
+  stdout：`已记录 #4：支出 0.20 元 交通 2026-10-24`；退出码 0
+- `add --type expense --amount 35.8 --category 餐饮 --date 2026-09-28`
+  stdout：`已记录 #5：支出 35.80 元 餐饮 2026-09-28`（35.8 与 35.80 等价）；退出码 0
+
+4-C summary / stats
+- `summary --month 2026-10`
+  ```
+  2026-10 汇总（人民币 CNY）
+  收入：1 笔   1200.00 元
+  支出：3 笔   36.10 元
+  结余：1163.90 元
+  ```
+  退出码 0
+- `summary --month 2026-09`
+  ```
+  2026-09 汇总（人民币 CNY）
+  收入：0 笔   0.00 元
+  支出：1 笔   35.80 元
+  结余：-35.80 元
+  ```
+  退出码 0
+- `stats --month 2026-10 --type expense`
+  ```
+  2026-10 支出分类统计（共 36.10 元 / 3 笔）
+  分类     笔数   金额(元)     占比
+  餐饮        1      35.80    99.2%
+  交通        2       0.30     0.8%
+  合计        3      36.10   100.0%
+  ```
+  退出码 0
+- `stats --month 2026-10 --type income`
+  ```
+  2026-10 收入分类统计（共 1200.00 元 / 1 笔）
+  分类     笔数   金额(元)     占比
+  其他        1    1200.00   100.0%
+  合计        1    1200.00   100.0%
+  ```
+  退出码 0
+
+4-D 数据文件核对（读取 t.json）
+```
+amount_cents: [3580, 120000, 10, 20, 3580]
+元素类型: ['int', 'int', 'int', 'int', 'int']
+note: ['', '项目款', '', '', '']
+id: [1, 2, 3, 4, 5]
+```
+退出码 0（金额全部为 int 分，无浮点）
+
+4-E 【修复核心】显式空串 `--date ""`
+- 命令前：`sha256sum /tmp/r2b/t.json` → `eb65482075f8599b310fe47b20ec20af323021a909dda55cd132ac437a6fcf51  /tmp/r2b/t.json`，退出码 0
+- `add --type expense --amount 10 --category 餐饮 --date "" --data /tmp/r2b/t.json`
+  stdout：无
+  stderr：`错误：日期不存在或格式应为 YYYY-MM-DD（如 2026-10-23）`
+  退出码 2
+- 命令后：`sha256sum /tmp/r2b/t.json` → `eb65482075f8599b310fe47b20ec20af323021a909dda55cd132ac437a6fcf51  /tmp/r2b/t.json`，退出码 0（与命令前完全一致，文件未变）
+
+4-F 【修复核心】纯空格 `--date "   "`
+- 命令前：`sha256sum /tmp/r2b/t.json` → `eb65482075f8599b310fe47b20ec20af323021a909dda55cd132ac437a6fcf51  /tmp/r2b/t.json`，退出码 0
+- `add --type expense --amount 10 --category 餐饮 --date "   " --data /tmp/r2b/t.json`
+  stdout：无
+  stderr：`错误：日期不存在或格式应为 YYYY-MM-DD（如 2026-10-23）`
+  退出码 2
+- 命令后：`sha256sum /tmp/r2b/t.json` → `eb65482075f8599b310fe47b20ec20af323021a909dda55cd132ac437a6fcf51  /tmp/r2b/t.json`，退出码 0（与命令前完全一致，文件未变）
+
+4-G 【反例】完全不带 `--date`（`--data /tmp/r2b/today.json`，该文件此前不存在）
+- `date +%F` → `2026-10-23`，退出码 0
+- `add --type expense --amount 5 --category 餐饮 --data /tmp/r2b/today.json`
+  stdout：`已记录 #1：支出 5.00 元 餐饮 2026-10-23`
+  stderr：`（已新建数据文件：/tmp/r2b/today.json）`；退出码 0
+- `cat /tmp/r2b/today.json`
+  ```
+  {
+    "version": 1,
+    "records": [
+      {
+        "id": 1,
+        "type": "expense",
+        "amount_cents": 500,
+        "category": "餐饮",
+        "date": "2026-10-23",
+        "note": "",
+        "created_at": "2026-10-23T06:06:19"
+      }
+    ]
+  }
+  ```
+  退出码 0（落盘 `date` = 2026-10-23 = 本机当天）
+
+4-H 一致性对照：`summary --month "" --data /tmp/r2b/t.json`
+- stdout：无；stderr：`错误：月份格式应为 YYYY-MM（如 2026-10）`；退出码 2
+
+4-I 非法金额（均带 `--category 餐饮`，数据文件 `/tmp/r2b/new.json`；该文件此前不存在）
+以下 10 个用例的 stdout 均为空、stderr 均为 `错误：金额必须是正数（单位：元），最多两位小数，例如 35.80`、退出码均为 2；每次事后 `if [ -e /tmp/r2b/new.json ]` 均输出 `FILE-NOT-EXISTS`（未生成文件）：
+- `--amount "1.005"`：stderr 同上，退出码 2；FILE-NOT-EXISTS
+- `--amount "0"`：stderr 同上，退出码 2；FILE-NOT-EXISTS
+- `--amount "0.00"`：stderr 同上，退出码 2；FILE-NOT-EXISTS
+- `--amount "-5"`：stderr 同上，退出码 2；FILE-NOT-EXISTS
+- `--amount "abc"`：stderr 同上，退出码 2；FILE-NOT-EXISTS
+- `--amount "1,200"`：stderr 同上，退出码 2；FILE-NOT-EXISTS
+- `--amount " 35.80"`：stderr 同上，退出码 2；FILE-NOT-EXISTS
+- `--amount "¥35.80"`：stderr 同上，退出码 2；FILE-NOT-EXISTS
+- `--amount "1e3"`：stderr 同上，退出码 2；FILE-NOT-EXISTS
+- `--amount ""`：stderr 同上，退出码 2；FILE-NOT-EXISTS
+
+4-J 合法金额边界（`--data /tmp/r2b/bound.json`）
+- `add --type expense --amount 0.05 --category 餐饮 --date 2026-10-23` → stdout `已记录 #1：支出 0.05 元 餐饮 2026-10-23`，stderr `（已新建数据文件：/tmp/r2b/bound.json）`，退出码 0；核对 `amount_cents: [5]`，元素类型 `['int']` → 符合期望
+- `add --type expense --amount 999999999999.99 --category 餐饮 --date 2026-10-23` → stdout `已记录 #2：支出 999999999999.99 元 餐饮 2026-10-23`，退出码 0；核对 `amount_cents: [5, 99999999999999]`，元素类型 `['int', 'int']` → 符合期望
+- `add --type expense --amount 9999999999999.99 --category 餐饮 --date 2026-10-23`（整数部分 13 位）→ stdout 无，stderr `错误：金额必须是正数（单位：元），最多两位小数，例如 35.80`，退出码 2 → 符合期望；事后 `amount_cents` 仍为 `[5, 99999999999999]`（未落盘）
+
+4-K 自带数据路径（在 `/tmp/r2b/empty/` 空目录内，绝对路径调 cli.py，不带 `--data`）
+- `cd /tmp/r2b/empty && python /workspace/code/cli.py add --type expense --amount 1 --category 餐饮 --date 2026-10-23`
+  stdout：`已记录 #1：支出 1.00 元 餐饮 2026-10-23`
+  stderr：`（已新建数据文件：/tmp/r2b/empty/data/ledger.json）`；退出码 0
+- `find /tmp/r2b/empty -type f` → `/tmp/r2b/empty/data/ledger.json`，退出码 0（该目录下只有这一个文件）
+- `cat /tmp/r2b/empty/data/ledger.json`
+  ```
+  {
+    "version": 1,
+    "records": [
+      {
+        "id": 1,
+        "type": "expense",
+        "amount_cents": 100,
+        "category": "餐饮",
+        "date": "2026-10-23",
+        "note": "",
+        "created_at": "2026-10-23T06:06:22"
+      }
+    ]
+  }
+  ```
+  退出码 0 → 默认路径为「当前目录 ./data/ledger.json」，符合预期
+
+4-L 从仓库根目录调用
+- `cd /workspace && python code/cli.py summary --month 2026-10 --data /tmp/r2b/t.json`
+  ```
+  2026-10 汇总（人民币 CNY）
+  收入：1 笔   1200.00 元
+  支出：3 笔   36.10 元
+  结余：1163.90 元
+  ```
+  退出码 0（与 4-C 逐字一致）
+
+4-M 非法枚举（前后 `sha256sum /tmp/r2b/t.json` 均为 `eb65482075f8…`，未变）
+- `add --type expense --amount 10 --category 旅行 --date 2026-10-23` → stderr `错误：分类必须是以下 8 类之一：餐饮、交通、购物、居住、娱乐、医疗、教育、其他`；退出码 2
+- `add --type expense --amount 10 --category 餐饮 --date 2026-02-30` → stderr `错误：日期不存在或格式应为 YYYY-MM-DD（如 2026-10-23）`；退出码 2
+- 同上 `--date 2026-2-3` → 同一报错；退出码 2
+- 同上 `--date 2026/10/23` → 同一报错；退出码 2
+- `summary --month 2026-13` → stderr `错误：月份格式应为 YYYY-MM（如 2026-10）`；退出码 2
+- `summary --month 2026-1` → 同一报错；退出码 2
+- `summary --month 202610` → 同一报错；退出码 2
+- `add --type transfer --amount 10 --category 餐饮 --date 2026-10-23` → stderr 为 argparse 用法行 + `错误：argument --type: invalid choice: 'transfer' (choose from income, expense)`；退出码 2
+- `stats --month 2026-10 --type transfer` → stderr 为 argparse 用法行 + `错误：argument --type: invalid choice: 'transfer' (choose from expense, income)`；退出码 2
+- 闰年 `add --type expense --amount 10 --category 餐饮 --date 2024-02-29 --data /tmp/r2b/leap.json` → stdout `已记录 #1：支出 10.00 元 餐饮 2024-02-29`，stderr `（已新建数据文件：/tmp/r2b/leap.json）`；退出码 0 → 符合期望
+
+4-N 只读命令无副作用（`/tmp/r2b/none.json` 不存在）
+- `summary --month 2026-11 --data /tmp/r2b/none.json`
+  ```
+  收入：0 笔 0.00 元
+  支出：0 笔 0.00 元
+  结余：0.00 元
+  ```
+  退出码 0
+- `stats --month 2026-11 --data /tmp/r2b/none.json` → stdout `该月没有支出记录`；退出码 0
+- `ls -l /tmp/r2b/none.json` → stderr `ls: cannot access '/tmp/r2b/none.json': No such file or directory`，退出码 2（只读命令未生成文件）
+
+4-O 损坏 JSON（`/tmp/r2b/bad.json` 内容为 `{`）
+- 前后 `sha256sum /tmp/r2b/bad.json` 均为 `021fb596db81e6d02bf3d2586ee3981fe519f275c0ac9ca76bbcf2ebb4097d96`（未变）
+- `summary --month 2026-10 --data /tmp/r2b/bad.json` → stderr `错误：数据文件格式不正确（/tmp/r2b/bad.json）：JSON 解析失败：Expecting property name enclosed in double quotes: line 1 column 2 (char 1)`；退出码 3
+- `stats --month 2026-10 --data /tmp/r2b/bad.json` → 同上 stderr；退出码 3
+- `add --type expense --amount 10 --category 餐饮 --date 2026-10-23 --data /tmp/r2b/bad.json` → 同上 stderr；退出码 3
+
+4-P 零浮点卡口（docs/技术方案.md 2.3）
+- `grep -rnE "float\(|:[[:space:]]*float" code/ledger.py code/cli.py` → 无输出，退出码 1（零命中）
+- `grep -rnE "(^|[^/])/[[:space:]]*100([^0-9]|$)" code/ledger.py code/cli.py` → 无输出，退出码 1（零命中）
+- `grep -rn "float" code/ledger.py code/cli.py` → 无输出，退出码 1（零命中）
+→ 三条全部零命中，符合「全程整数分、不用浮点、不做 /100 换算」的卡口
+
+4-Q 口径核查
+- `python cli.py export --data /tmp/r2b/t.json` → stdout 无；stderr 为 argparse 用法行 + `错误：argument command: invalid choice: 'export' (choose from add, summary, stats)`；退出码 2（本期未实现导出子命令，与第 3 节备注一致）
+- `grep -rn -i csv code/ledger.py code/cli.py` → 无输出，退出码 1（零命中，代码中无 CSV 相关实现）
+
+4-R 12 笔样例（餐饮 5 笔 1200.00 元、交通 4 笔 900.00 元、购物 3 笔 1356.78 元）
+- 首次执行 `python /tmp/r2b/build_big.py`（绝对路径）→ stderr `ModuleNotFoundError: No module named 'ledger'`，退出码 1；`big.json` 未生成，随后 `stats` 输出 `该月没有支出记录`（退出码 0）。**原因：脚本以绝对路径运行时 `sys.path[0]` 是脚本所在目录 `/tmp/r2b` 而非 `code/`，属脚手架问题，非被测代码问题。**
+- 修正重跑（同一用例）：`cd /workspace/code && PYTHONPATH=/workspace/code python /tmp/r2b/build_big.py` → stdout `records: 12 total_cents: 345678`，退出码 0
+- 数据核对：`amount_cents` 12 个元素全为 `int`（餐饮 5 笔各 24000；交通 4 笔各 22500；购物 3 笔各 45226），退出码 0
+- `stats --month 2026-10 --type expense --data /tmp/r2b/big.json`
+  ```
+  2026-10 支出分类统计（共 3456.78 元 / 12 笔）
+  分类     笔数   金额(元)     占比
+  购物        3    1356.78    39.2%
+  餐饮        5    1200.00    34.7%
+  交通        4     900.00    26.0%
+  合计       12    3456.78   100.0%
+  ```
+  退出码 0
+- 独立整数复算 `(amount*2000+total)//(2*total)` → 购物 392、餐饮 347、交通 260，即 39.2% / 34.7% / 26.0%，与程序输出四舍五入一致
+
+4-S 真实数据目录未被污染
+- `ls -la /workspace/code/data 2>&1` → stdout `ls: cannot access '/workspace/code/data': No such file or directory`，退出码 2（`code/data/` 不存在，本轮未创建、未改动）
+
+### 结论
+
+① E/F：`--date ""` 与 `--date "   "` 均**退出码 2**；`t.json` 的 sha256 在命令前后均为 `eb65482075f8599b310fe47b20ec20af323021a909dda55cd132ac437a6fcf51`，**未变** → 符合期望，修复生效（显式空值不再静默取当天）。
+② G：完全不带 `--date` 时**退出码 0**，落盘 `date` = `2026-10-23`，与本机 `date +%F`（`2026-10-23`）**一致** → 符合期望。
+③ 主流程输出与第 1 轮**逐字一致**：4-C / 4-L 的 `summary`（1200.00 / 36.10 / 1163.90；-35.80）与 `stats`（36.10 元 3 笔；餐饮 35.80 99.2%、交通 0.30 0.8%、合计 100.0%）与第 1 节 1-2 记录完全相同，无回归。
+④ P：三条 grep 退出码均为 1，**零命中** → 符合「零浮点」卡口。
+⑤ 未创建、未改动 `code/data/`：`ls -la code/data` 报 `No such file or directory`；所有数据文件都在 `/tmp/r2b/` 下 → 符合期望。
+
+与期望不符 / 需说明的项：
+- 4-R 首次执行失败（`ModuleNotFoundError: No module named 'ledger'`），是脚手架以绝对路径运行脚本导致 `sys.path` 不含 `code/`，已用 `PYTHONPATH` 修正重跑并通过，占比与整数复算一致；被测代码本身无问题。
+- 4-G 的 add 金额取 `--amount 5`（任务未指定金额），其余行为按任务要求。
+- 其余 A~S 各项均与期望一致；第 1 节的 4 项未实测项（非法金额文案、金额边界、默认数据路径、仓库根调用）已在本节 4-I / 4-J / 4-K / 4-L 全部补跑通过。
+
+## 5 第 3 轮（返工：README 的技术方案版本引用 v1.3 → v1.2；只改文档，代码零改动）
+
+背景：第 2 轮审查意见 1 —— `code/README.md` 与 `code/README.简洁版.md` 把「本期唯一实现依据」的技术方案版本写成不存在的 v1.3（`docs/技术方案.md` 首行实际是 v1.2）。本轮只改这两份文档：版本引用改回 v1.2，并把「`--date` 显式空值报错」如实标为测试审查后的实现侧补充口径（技术方案 4.3 未写入该行），同时写入两份 README 的「待确认」第 5 条。`code/ledger.py`、`code/cli.py`、`code/verify.log` 的旧内容、`docs/` 下所有文件本轮均未改动。
+
+5-A 版本引用检查
+- `grep -rn "v1\.3" code/README.md code/README.简洁版.md code/verify.log docs/*.md`
+  - `docs/技术方案.md` 首行（第 3 行）：`- 版本：v1.2（2026-10-23）｜作者：软件架构师｜上游依据：docs/PRD.md（v1.1：F4 导出 CSV 已移出本期）` → **仓库最新版本确为 v1.2，不存在 v1.3 文稿**
+  - `code/verify.log` → 零命中，退出码 1
+  - `code/README.md:7`、`code/README.简洁版.md:5` 各有一处「v1.3」，均为**说明性文字**（「本文此前误写为 v1.3，已改回 v1.2」），不是有效版本引用
+- `docs/PRD.md` 首行：`- 版本：v1.1（2026-10-23）` → 与 README 引用的 v1.1 一致
+
+5-B 语法检查：`cd code && python -m py_compile ledger.py cli.py` → `COMPILE_OK`，退出码 0
+
+5-C README 示例与实测逐字节比对（数据在 `/tmp/rev3/`、`/tmp/rev3b/`，`code/data/` 未创建）
+用 Python 读 `code/README.md` 的代码块原文，与 `subprocess` 实测 stdout 逐字节比较：
+```
+[add #92]  byte-exact=YES exit=0 stderr='（已新建数据文件：/tmp/rev3b/t.json）\n'
+[add #95]  byte-exact=YES exit=0 stderr=''
+[add #98]  byte-exact=YES exit=0 stderr=''
+[add #101] byte-exact=YES exit=0 stderr=''
+[add #104] byte-exact=YES exit=0 stderr=''
+[summary 2026-10]      byte-exact=YES exit=0 stderr=''
+[stats --type expense] byte-exact=YES exit=0 stderr=''
+[stats --type income]  byte-exact=YES exit=0 stderr=''
+ALL: PASS
+```
+→ 主流程 5 笔 add + summary + stats(expense/income) 与 README 的示例输出**逐字节一致**，无回归（数据目录：`/tmp/rev3/t.json`，`code/data/` 未创建）
+
+5-D `--date` 显式空值复跑（确认第 2 轮修复未被本轮文档改动影响）
+- 命令前 `sha256sum /tmp/rev3/t.json` → `b16f4279e55a85658f728e767bc5a3ef5feb19c1dc3acef3ff3b3d9972ef9623`
+- `add --type expense --amount 5 --category 餐饮 --date "" --data /tmp/rev3/t.json` → stdout 空；stderr 单行 `错误：日期不存在或格式应为 YYYY-MM-DD（如 2026-10-23）`；退出码 2
+- `add --type expense --amount 5 --category 餐饮 --date "   " --data /tmp/rev3/t.json` → 同上（stdout 空、stderr 单行、退出码 2）
+- 命令后 `sha256sum /tmp/rev3/t.json` → `b16f4279e55a85658f728e767bc5a3ef5feb19c1dc3acef3ff3b3d9972ef9623`（与命令前完全一致 = 文件未变）
+- 反例（不带 `--date`，仍显式给 `--data` 以免写默认路径）：`add --type expense --amount 5 --category 餐饮 --data /tmp/rev3/t.json` → stdout `已记录 #6：支出 5.00 元 餐饮 2026-10-23`、退出码 0；落盘 `{"id": 6, "type": "expense", "amount_cents": 500, "category": "餐饮", "date": "2026-10-23", "note": "", "created_at": "2026-10-23T06:18:44"}`，`date` = 本机 `date +%F`（2026-10-23）
+
+5-E 零浮点卡口（docs/技术方案.md 2.3；范围 `code/ledger.py code/cli.py`）
+- `grep -rnE "float\(|:[[:space:]]*float" code/ledger.py code/cli.py` → 无输出，退出码 1（零命中）
+- `grep -rnE "(^|[^/])/[[:space:]]*100([^0-9]|$)" code/ledger.py code/cli.py` → 无输出，退出码 1（零命中）
+- 对照 `grep -rn "//[[:space:]]*100" code/ledger.py code/cli.py` → `code/ledger.py:68:    return f"{cents//100}.{cents%100:02d}"`（整除写法，未被卡口误伤）
+
+5-F 文件未改动 / 无数据污染
+- `sha256sum code/ledger.py code/cli.py` → `70271870822b96d22ccc9c4300ef35ce82504ab4ac886c939f28b7a85dfc07cd` / `2f49cadfd65064d3ec29fcfb55bdf41ed1848e775e674db79cc273f5cca5f25e`；mtime：`ledger.py` 04:55、`cli.py` 06:01、`verify.log` 06:08，均早于本轮检查起始时间（06:15）→ 代码与 verify.log 旧内容本轮未被改动
+- `ls -la code/data/` → `ls: cannot access 'code/data/': No such file or directory`，退出码 2（未创建、未改动）
+- 本轮唯一被写入的产物是 `code/__pycache__/{ledger,cli}.cpython-312.pyc`（`py_compile` 的编译产物，非源码/文档）
+
+### 结论（第 3 轮）
+
+① README 引用的技术方案版本已由 v1.3 改回实际存在的 **v1.2**（依据：`docs/技术方案.md` 首行），`code/` 下不再有指向不存在文稿的版本引用；「`--date` 显式空值报错」这条实现侧补充口径已如实标注来源（测试审查意见 + 本实现的显式校验）并写入两份 README 的「待确认」第 5 条，请技术方案作者确认后补入 4.3。
+② 本轮代码零改动（mtime 与 sha256 均可佐证）：主流程输出与 README 逐字节一致、`--date` 修复点与零浮点卡口复跑全部通过 → 无回归。
+③ 未创建、未改动 `code/data/`；未改动 `docs/` 下任何同事文件。

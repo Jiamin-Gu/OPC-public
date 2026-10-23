@@ -125,6 +125,38 @@ def intake_node(state: CompanyState, runtime: Runtime[Ctx]) -> Command:
         _post(runtime, ALL, new_message("system", "event", "CEO 取消了这条指令"))
         return Command(goto=END, update={**base, "tasks": cancelled, "approval": None})
 
+    if kind == "plan_edit":  # CEO 审批时直接编辑计划（不调用规划助手）：发一张新的计划卡片，审批移到它上面
+        approval = state.get("approval")
+        if not approval or approval.get("type") != "plan_review":
+            return Command(goto=END, update=base)
+        current = [tasks[i] for i in approval["task_ids"] if i in tasks]
+        try:
+            specs, notes = planner.edit_plan(ev.get("tasks"), current, runtime.context.company.role_ids)
+        except planner.PlanError as e:  # 网页提交前已经校验过；这里是兜底
+            _post(runtime, ALL, new_message("system", "error", f"计划没有改成：{e}"))
+            return Command(goto=END, update=base)
+        d = state["directive"]
+        plan_tag = new_id()[:4]
+        ids = {s["key"]: s["id"] or f"{d['id']}-{plan_tag}-{s['key']}" for s in specs}
+        edited = {}
+        for s in specs:
+            fields = dict(title=s["title"], detail=s["detail"], assignee=s["assignee"], reviewer=s["reviewer"],
+                          depends_on=[ids[x] for x in s["depends_on"]], starts_after=[ids[x] for x in s["starts_after"]],
+                          deliverables=s["deliverables"], acceptance=s["acceptance"])
+            edited[ids[s["key"]]] = ({**tasks[s["id"]], **fields} if s["id"] else
+                                     Task(id=ids[s["key"]], directive_id=d["id"], status="pending", result="", files=[],
+                                          round=0, reviews=[], ceo_note="", quick=False, **fields))
+        edited.update({t["id"]: {**t, "status": "cancelled"} for t in current if t["id"] not in edited})
+        msg_id = new_id()
+        text = "CEO 修改了计划：\n" + "\n".join(f"- {n}" for n in notes) if notes else "CEO 保存了计划（没有改动）"
+        _post(runtime, ALL, new_message("planner", "plan", text, id=msg_id, tasks=list(ids.values()),
+                                        directive_id=d["id"], edited=True))
+        if ev.get("approve"):
+            _post(runtime, ALL, new_message("system", "event", "CEO 批准了计划，开始执行"))
+            return Command(goto="schedule", update={**base, "tasks": edited, "approval": None})
+        return Command(goto=END, update={**base, "tasks": edited,
+                                         "approval": {**approval, "task_ids": list(ids.values()), "plan_msg": msg_id}})
+
     if kind == "job_done":
         cur = tasks.get(ev.get("task_id"))
         merged = merge_job_result(cur, ev["job"], ev.get("task"), bool(ev.get("paused")), ev.get("files") or [],
@@ -280,7 +312,8 @@ def plan_node(state: CompanyState, runtime: Runtime[Ctx]) -> Command:
         if quick and not ctx.auto_approve:
             _post(runtime, ALL, new_message("system", "event", "小任务：直接开始，不需要审批，也不安排审查"))
         return Command(goto="schedule", update=update)
-    approval = {"type": "plan_review", "directive_id": d["id"], "summary": summary, "task_ids": list(tasks)}
+    approval = {"type": "plan_review", "directive_id": d["id"], "summary": summary, "task_ids": list(tasks),
+                "plan_msg": msg_id}
     return Command(goto=END, update={**update, "approval": approval})
 
 

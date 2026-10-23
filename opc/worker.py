@@ -26,9 +26,9 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.runtime import Runtime
 from langgraph.types import Command, interrupt
 
-from . import security, tracing, web_tools
+from . import coding, security, tracing, web_tools
 from .agents import (KB_TOOL, Cancelled, LiveWriter, _call_web, _delegate_to_coder, call_kb, execute_tool,
-                     system_prompt, tools_for, uses_coder)
+                     runs_tests, system_prompt, tools_for, uses_coder)
 from .changes import Either
 from .company import Company
 
@@ -95,6 +95,7 @@ class WorkerCtx:
     can_write: Callable[[str, str], str | None] | None = None  # 写文件前检查（路径, 工具名）：返回拒绝的原因，None 表示可以写
     after_tools: Callable[[], None] | None = None  # 每一步的工具都执行完以后调用（合并这一步的上报）
     guard: security.Guard = field(default_factory=security.Guard)  # 防提示词注入：这次执行的安全状态
+    runner: object = None  # 测试角色的 run_command（coding.CommandRunner）：只读的讨论和审查里也能用，运行测试不改文件
 
     def stopped(self) -> bool:
         return self.stop is not None and self.stop.is_set()
@@ -267,7 +268,7 @@ def tools_node(state: WorkerState, runtime: Runtime[WorkerCtx]) -> dict:
 
 
 EXTERNAL = {"kb_search"}  # 结果来自外部（另外还有所有联网 / MCP 工具）：加边界、检测
-SCANNED = {"read_file"}    # 公司文件区的文件是同事写的，不加边界，但也检测（可能是之前被注入的结果）
+SCANNED = {"read_file", "run_command"}  # 公司文件区的内容是同事写的，不加边界，但也检测（可能是之前被注入的结果）
 
 
 def _security_block(ctx: WorkerCtx, name: str, raw: str) -> str | None:
@@ -289,7 +290,7 @@ def _secure_result(ctx: WorkerCtx, span, name: str, raw: str, result: str) -> st
     if not security.enabled() or result.startswith("错误") or not (external or name in SCANNED):
         return result
     source = f"{name} {_arg(raw, 'path') or _arg(raw, 'query') or _arg(raw, 'url') or ''}".strip()
-    hits = ctx.guard.inspect(result, source)
+    hits = ctx.guard.inspect(result, source, internal=not external)  # 同事写的不查命令和编码串，见 security.INTERNAL_SKIP
     if external:
         result = security.wrap(result, source)
     if hits:
@@ -335,6 +336,14 @@ def _tool(ctx: WorkerCtx, state: WorkerState, call: dict, name: str, raw: str, l
         ctx.emit({"type": "tool", **ctx.base_event, **summary})
     elif name == "kb_search":  # 检索公司知识库（只读）
         result, summary = call_kb(ctx.company, raw)
+        logs.append(summary)
+        ctx.emit({"type": "tool", **ctx.base_event, **summary})
+        _observe(ctx, summary)
+    elif name == "run_command" and ctx.runner is not None:  # 测试角色运行测试（读到可疑内容后由 guard 拦下）
+        try:
+            result, summary = ctx.runner.run(json.loads(raw or "{}"))
+        except json.JSONDecodeError as e:
+            result, summary = f"错误：参数不是合法的 JSON（{e}）", {"name": name, "ok": False}
         logs.append(summary)
         ctx.emit({"type": "tool", **ctx.base_event, **summary})
         _observe(ctx, summary)
@@ -425,15 +434,17 @@ def run(company: Company, role_id: str, conversation: list[dict], emit: Callable
     """
     saver = saver or _DEFAULT_SAVER
     hub = web_tools.get_client() if company.web else None  # 联网：经 MCP 服务器搜索和读网页
+    runner = coding.CommandRunner(company) if runs_tests(company, role_id) else None
     ctx = WorkerCtx(company=company, role_id=role_id, emit=emit,
                     base_event={"msg_id": msg_id, "channel": channel, "sender": role_id}, cancel=cancel,
                     max_steps=max_steps, stop=stop, listen=listen,
                     tools=[t for t in tools_for(role_id) if not readonly or t["function"]["name"] in READONLY_TOOLS]
+                    + ([coding.RUN_TOOL] if runner else [])
                     + (hub.schemas() if hub else []) + ([KB_TOOL] if company.kb else []) + (extra_tools or []),
                     handlers=handlers or {}, hub=hub, web_names={t["name"] for t in hub.tools} if hub else set(),
                     answer_last=answer_last, after_tools=after_tools, pause_on_limit=pause_on_limit,
                     finished=finished, require_finish=require_finish, observe=observe, can_write=can_write,
-                    finish_tool=finish_tool, guard=guard or security.Guard())
+                    finish_tool=finish_tool, guard=guard or security.Guard(), runner=runner)
     thread = thread_id or f"worker/{role_id}/{msg_id}/{uuid.uuid4().hex[:6]}"
     cfg = {"configurable": {"thread_id": thread}}
     graph = _graph_for(saver)
@@ -451,6 +462,9 @@ def run(company: Company, role_id: str, conversation: list[dict], emit: Callable
     except BaseException:  # CEO 停止了公司、模型调用失败：这次执行不会再恢复，检查点清掉
         _forget(saver, thread)
         raise
+    finally:
+        if runner is not None:
+            runner.close()  # 运行测试用的沙箱容器每次执行完就删掉（暂停后恢复时重新创建）
 
     snap = graph.get_state(cfg)
     v = snap.values or {}

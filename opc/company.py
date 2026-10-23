@@ -65,6 +65,14 @@ def _is_temp(p: Path) -> bool:
     return p.name.startswith(".") and p.name.endswith(".tmp")
 
 
+CACHE_DIRS = {"__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache"}
+
+
+def _is_cache(rel: Path) -> bool:
+    """运行代码和测试产生的缓存（字节码等）：不是谁的产出，不显示在成果里（v1.0 验收时 .pyc 出现在了成果列表里）。"""
+    return rel.suffix == ".pyc" or any(part in CACHE_DIRS for part in rel.parts)
+
+
 class Company:
     def __init__(self, meta: dict, root: Path, llm_factory=None):
         self.meta = meta
@@ -188,7 +196,7 @@ class Company:
         meta = self.file_meta()
         out = []
         for p in sorted(self.files_root.rglob("*")):
-            if p.is_file() and not _is_temp(p):
+            if p.is_file() and not _is_temp(p) and not _is_cache(p.relative_to(self.files_root)):
                 rel = p.relative_to(self.files_root).as_posix()
                 item = {"path": rel, "size": p.stat().st_size, **meta.get(rel, {})}
                 if p.suffix.lower() in (".md", ".markdown"):
@@ -320,6 +328,13 @@ class Company:
         with self._lock:
             self.meta["kb"] = bool(enabled)
             _atomic_write(self.root / "company.json", json.dumps(self.meta, ensure_ascii=False, indent=1))
+
+    def mark_sandboxed(self) -> None:
+        """这家公司运行代码用过 Docker 沙箱：之后 Docker 用不了时不悄悄改在本机运行（见 coding.sandbox_for）。"""
+        if not self.meta.get("sandboxed"):
+            with self._lock:
+                self.meta["sandboxed"] = True
+                _atomic_write(self.root / "company.json", json.dumps(self.meta, ensure_ascii=False, indent=1))
 
     @property
     def allow_run(self) -> bool:

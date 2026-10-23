@@ -77,6 +77,9 @@ def _roles_text(company: Company) -> str:
         line = f"- {r}（{ROLES[r].name}）：{ROLES[r].duties}"
         if ROLES[r].can_code and coding.AVAILABLE and company.allow_run:
             line += "【可以借助编码 agent 编写代码并实际运行、测试，可以安排“实现并通过测试”这类任务】"
+        elif ROLES[r].can_test and coding.AVAILABLE and company.allow_run:
+            line += ("【可以运行命令和测试（只运行、不改实现代码）：有代码要交付时，可以安排它在代码任务之后“编写测试用例并实际运行、"
+                     "交测试报告”，审查代码时它也会运行测试核实】")
         lines.append(line)
     return "\n".join(lines)
 
@@ -202,6 +205,76 @@ def require_review_for_upstream(tasks: list[dict]) -> None:
         reviewer = next((r for r in users if r != t["assignee"]), "")
         if reviewer:
             t["reviewer"] = reviewer
+
+
+def edit_plan(rows: list, current: list[dict], allowed_roles: list[str]) -> tuple[list[dict], list[str]]:
+    """CEO 在审批时直接编辑的计划：按和规划助手的计划同样的规则校验。
+    rows 按顺序是编辑后的任务：{id（已有任务的 id；新任务留空）, key（新任务的临时标识）, title, detail, assignee,
+    reviewer, depends_on（前面任务的 id 或临时标识）, acceptance（每行一条）, deliverables（交付文件的路径）}。
+    current 是编辑前计划里的任务。返回 (校验后的任务, 给 CEO 看的改动说明)；有错时抛 PlanError。
+    交付文件路径没变的保留规划助手定的必含章节、字数等检查，新加的路径只检查文件存在。"""
+    old = {t["id"]: t for t in current}
+    specs, seen, notes = [], set(), []
+    for i, r in enumerate(rows if isinstance(rows, list) else []):
+        if not isinstance(r, dict):
+            continue
+        tid = str(r.get("id") or "")
+        key = tid if tid in old else str(r.get("key") or f"new{i + 1}")
+        if key in seen:
+            raise PlanError("任务重复")
+        title = str(r.get("title") or "").strip()[:60]
+        if not title:
+            raise PlanError(f"第 {i + 1} 个任务没有标题")
+        assignee = str(r.get("assignee") or "").strip()
+        if assignee not in allowed_roles:
+            raise PlanError(f"《{title}》的负责人不是公司成员")
+        reviewer = str(r.get("reviewer") or "").strip()
+        if reviewer and (reviewer not in allowed_roles or reviewer == assignee):
+            raise PlanError(f"《{title}》的审查人要是负责人以外的公司成员")
+        prev = old.get(tid) or {}
+        kept = {d["path"]: d for d in prev.get("deliverables") or []}
+        paths = [str(p).strip() for p in (r.get("deliverables") or []) if str(p).strip()]
+        deliverables = parse_deliverables([kept.get(p.replace("\\", "/").lstrip("/"), {"path": p}) for p in paths],
+                                          allowed_roles)
+        specs.append({"key": key, "id": tid if tid in old else "", "title": title,
+                      "detail": str(r.get("detail") or "").strip(), "assignee": assignee,
+                      "depends_on": [str(d) for d in (r.get("depends_on") or []) if str(d) in seen],
+                      "starts_after": [d for d in prev.get("starts_after") or [] if d in seen],
+                      "reviewer": reviewer, "deliverables": deliverables,
+                      "acceptance": _texts(r.get("acceptance"), MAX_ACCEPTANCE, 300)})
+        seen.add(key)
+    if not specs:
+        raise PlanError("计划里至少要有一个任务；不想做了可以取消这条指令")
+    if len(specs) > MAX_TASKS:
+        raise PlanError(f"最多 {MAX_TASKS} 个任务")
+    for s in specs:  # 去掉的依赖：编辑前依赖的任务被删掉了
+        s["starts_after"] = [d for d in s["starts_after"] if d not in s["depends_on"]]
+        gone = [old[d]["title"] for d in (old.get(s["id"]) or {}).get("depends_on") or [] if d not in seen]
+        if gone:
+            notes.append(f"《{s['title']}》不再等待已删除的" + "、".join(f"《{g}》" for g in gone))
+    reviewers = {s["key"]: s["reviewer"] for s in specs}
+    require_review_for_upstream(specs)
+    names = {s["key"]: s["title"] for s in specs}
+    for s in specs:
+        if not reviewers[s["key"]] and s["reviewer"]:
+            notes.append(f"《{s['title']}》有下游依赖，按规则安排了审查人")
+        p = old.get(s["id"])
+        if not p:
+            notes.append(f"新增《{s['title']}》")
+            continue
+        changed = [label for label, a, b in (
+            ("标题", p["title"], s["title"]), ("负责人", p["assignee"], s["assignee"]),
+            ("审查人", p.get("reviewer") or "",  # 按规则补上的上面已经说明
+             p.get("reviewer") or "" if not reviewers[s["key"]] and s["reviewer"] else s["reviewer"]),
+            ("要求", p["detail"], s["detail"]),
+            ("依赖", sorted(p["depends_on"]), sorted(s["depends_on"])),
+            ("验收标准", p.get("acceptance") or [], s["acceptance"]),
+            ("交付文件", [d["path"] for d in p.get("deliverables") or []], [d["path"] for d in s["deliverables"]]))
+            if a != b]
+        if changed:
+            notes.append(f"《{s['title']}》改了" + "、".join(changed))
+    notes += [f"删除《{t['title']}》" for t in current if t["id"] not in names]
+    return specs, notes
 
 
 def make_plan(company: Company, directive: str, feedback: str, recent_tasks: list[dict], on_delta,

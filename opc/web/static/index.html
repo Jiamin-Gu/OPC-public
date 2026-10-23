@@ -45,8 +45,8 @@
         <div class="role-grid" id="roleGrid"></div>
         <label class="run-toggle" id="runToggle" hidden>
           <input type="checkbox" id="cAllowRun" checked>
-          <span><b>允许工程师运行代码</b><br>
-            <em class="muted">工程师写代码用的编码 agent 已经装好。勾选后它还会实际运行代码（例如跑测试、试运行程序），危险命令会被拦截；不勾选时只写代码、不运行。<br><span id="runWhere"></span></em></span>
+          <span><b>允许运行代码</b><br>
+            <em class="muted">工程师写代码用的编码 agent 已经装好。勾选后它还会实际运行代码（例如跑测试、试运行程序），测试也能自己运行测试、核实"测试通过"（只运行，不改代码），危险命令会被拦截；不勾选时只写代码、不运行。<br><span id="runWhere"></span></em></span>
         </label>
         <label class="field">投入档位（只限审查轮数和执行步数，不限 token；到了上限交给你决定）
           <select id="cEffort"></select>
@@ -200,6 +200,19 @@
     </div>
     <div class="dlg-foot"><div class="spacer"></div>
       <button class="btn" data-close>取消</button><button class="btn primary" id="coSave">保存</button></div>
+  </dialog>
+
+  <!-- ============ 编辑计划 ============ -->
+  <dialog class="dlg wide" id="planDlg" data-sticky="1">
+    <div class="dlg-head"><b>编辑计划</b><span class="muted">直接改，不经过规划助手；改完可以马上批准执行</span><div class="spacer"></div>
+      <button class="icon-btn" data-close aria-label="关闭">✕</button></div>
+    <div class="dlg-body pe-list" id="planEditBody"></div>
+    <div class="pe-note" id="planEditNote"></div><div class="pe-err" id="planEditErr"></div>
+    <div class="dlg-foot"><button class="btn" id="planAddTask">＋ 新增任务</button>
+      <div class="spacer"></div>
+      <button class="btn ghost" data-close>取消</button>
+      <button class="btn" id="planSave">只保存</button>
+      <button class="btn ok" id="planSaveApprove">保存并批准执行</button></div>
   </dialog>
 
   <!-- ============ 用量 ============ -->

@@ -19,7 +19,7 @@ try:
     import coder
     from coder.agent import Agent as CodingAgent
     from coder.permissions import PermissionManager
-    from coder.tools import ProcessManager, build_tools
+    from coder.tools import ProcessManager, ToolError, build_tools
     from coder.tools.base import Tool as CoderTool
     from coder.workspace import Workspace
     try:  # Docker 沙箱（Coding-agent v2.4 起有）
@@ -29,7 +29,7 @@ try:
     AVAILABLE = tuple(int(x) for x in coder.__version__.split(".")[:2]) >= (1, 0)
     VERSION = coder.__version__
 except ImportError:
-    AVAILABLE, VERSION, CoderTool = False, None, object
+    AVAILABLE, VERSION, CoderTool, ToolError = False, None, object, Exception
     DockerSandbox, docker_status = None, None
 
 _sandbox_cache: dict = {"at": 0.0, "status": (False, "")}
@@ -51,6 +51,22 @@ def sandbox_status() -> tuple[bool, str]:
             _sandbox_cache["status"] = (False, f"检查 Docker 失败：{e}")
         _sandbox_cache["at"] = now
     return _sandbox_cache["status"]
+
+
+def sandbox_for(company, root) -> tuple[object, str]:
+    """这一次运行命令用的沙箱：(沙箱或 None, 不能运行的原因)。
+    这家公司以前用过沙箱、现在 Docker 用不了（比如中途退出了）时，不悄悄改在本机运行：返回原因，调用方只写不运行。
+    v1.0 验收时 Docker Desktop 中途退出，编码 agent 的命令就没有任何提示地改在了本机执行。
+    从来没用过沙箱的公司（没装 Docker）照旧在本机运行，创建公司时已经提示过；OPC_CODE_SANDBOX=0 是明确不用沙箱。"""
+    import os
+    ok, why = sandbox_status()
+    if ok:
+        if hasattr(company, "mark_sandboxed"):
+            company.mark_sandboxed()
+        return DockerSandbox(root), ""
+    if (getattr(company, "meta", None) or {}).get("sandboxed") and os.getenv("OPC_CODE_SANDBOX", "1").strip() != "0":
+        return None, f"Docker 沙箱现在用不了（{why}），为了安全不改在本机运行命令；Docker 恢复后再试"
+    return None, ""
 
 CODER_MAX_STEPS = 30
 # 编码 agent 的上下文超过这么多 token 就压缩（它自己的默认值是 6 万）。
@@ -78,6 +94,70 @@ CODE_TOOL = {"type": "function", "function": {
 
 # 能执行命令的工具：公司没有允许运行代码时全部去掉（Coding-agent v2.3 起除了 run_command 还有后台进程工具）
 RUN_TOOLS = ("run_command", "start_process", "process_output", "stop_process", "list_processes")
+
+# 测试角色运行测试用的工具：只运行命令、看结果，不像编码 agent 那样会顺手改代码（发现问题要报告出来，交给负责人返工）
+RUN_TOOL = {"type": "function", "function": {
+    "name": "run_command",
+    "description": "在公司共享文件区的根目录运行一条命令，返回退出码和输出。用来运行测试（例如 pytest -q、npm test）、"
+                   "核实\"测试通过\"之类的说法。不能联网、不能安装依赖，只能用已经装好的库（Python 有 pytest）；"
+                   "不要运行需要交互输入或者不会自己退出的命令（开发服务器等）。",
+    "parameters": {"type": "object", "properties": {
+        "command": {"type": "string", "description": "要运行的命令，例如 pytest -q tests/"},
+        "timeout": {"type": "integer", "description": "超时秒数，默认 120，最多 600"}},
+        "required": ["command"]}}}
+MAX_OUTPUT = 12_000  # 命令输出太长时只留开头和结尾（测试失败的摘要一般在最后）
+
+
+class CommandRunner:
+    """测试角色的 run_command：有 Docker 就在沙箱里运行（只看得到公司文件区、断网、非 root），没有就在本机运行，
+    和编码 agent 的规则一样。一次执行里的命令共用一个沙箱容器，第一次运行时才创建，执行结束时删掉。"""
+
+    def __init__(self, company):
+        self.company = company
+        self.root = company.files_root
+        self.sandbox = None
+        self.tool = None
+
+    def _ensure(self) -> None:
+        if self.tool is None:
+            workspace = Workspace(self.root)
+            self.sandbox, refused = sandbox_for(self.company, workspace.root)
+            if refused:  # 以前用沙箱、现在 Docker 用不了：这次不运行（下次调用再查）
+                raise ToolError(refused)
+            self.tool = build_tools(workspace, None, self.sandbox)["run_command"]
+
+    def run(self, args: dict) -> tuple[str, dict]:
+        """返回 (给模型的结果, 工具记录 {name, command, exit, ok})。"""
+        command = str(args.get("command") or "").strip()
+        if not command:
+            return "错误：需要提供 command（要运行的命令）", {"name": "run_command", "ok": False}
+        try:
+            timeout = int(args.get("timeout") or 120)
+        except (TypeError, ValueError):
+            timeout = 120
+        summary = {"name": "run_command", "command": command[:300]}
+        try:
+            self._ensure()
+            out = self.tool.run(command=command, timeout=timeout)
+        except ToolError as e:
+            return f"错误：{e}", {**summary, "ok": False}
+        except Exception as e:  # Docker 出问题等：告诉角色没能运行，不要当成测试结果
+            return f"错误：命令没能运行（{type(e).__name__}: {e}）", {**summary, "ok": False}
+        m = re.match(r"退出码：(-?\d+)", out)
+        code = int(m.group(1)) if m else None
+        if len(out) > MAX_OUTPUT:
+            out = out[:3000] + f"\n…（中间省略 {len(out) - MAX_OUTPUT} 字）…\n" + out[-(MAX_OUTPUT - 3000):]
+        where = "（在 Docker 沙箱里运行）" if self.sandbox is not None else "（在本机运行）"
+        return f"$ {command}{where}\n{out}", {**summary, "exit": code, "ok": code == 0}
+
+    def close(self) -> None:
+        if self.sandbox is not None:
+            try:
+                self.sandbox.stop()
+            except Exception:
+                pass
+            self.sandbox = None
+        self.tool = None
 
 
 class Stop(Exception):
@@ -194,7 +274,10 @@ def run_code_agent(company, role_id: str, task: str, emit, base_event: dict, can
     """运行一次编码 agent，返回 {result（交给工程师的文字）, files, steps, usage}。"""
     workspace = Workspace(company.files_root)
     # 运行代码时有 Docker 就进沙箱：容器里只看得到公司文件区，默认断网、非 root，碰不到这台电脑上别的东西
-    sandbox = DockerSandbox(workspace.root) if allow_run and sandbox_status()[0] else None
+    sandbox, refused = sandbox_for(company, workspace.root) if allow_run else (None, "")
+    if refused:  # 以前用沙箱、现在 Docker 用不了：这次只写不运行，并提醒 CEO
+        allow_run = False
+        emit({"type": "notice", "level": "error", "text": f"编码 agent：{refused}"})
     processes = ProcessManager(sandbox)  # 编码 agent 启动的后台进程（开发服务器等），结束时全部停掉
     tools = build_tools(workspace, processes, sandbox)
     if not allow_run:  # 公司没有允许运行代码：只能读写。所有能执行命令的工具都要去掉，包括后台进程
@@ -203,9 +286,11 @@ def run_code_agent(company, role_id: str, task: str, emit, base_event: dict, can
     if company.kb:
         tools["kb_search"] = KBSearchTool(workspace, company)
     ui = ProgressUI(company, role_id, emit, base_event, cancel)
+    # sandbox 也要交给编码 agent：它据此告诉模型命令在 Linux 容器里执行。v1.0 验收时没传，模型以为在 Windows 上，
+    # 每次开头都先试 dir、where，还留下了一个叫 nul 的文件（2>nul）
     agent = CodingAgent(company.llm_for(role_id), tools, workspace,
                         PermissionManager(ask=ui.ask_permission, auto=True), ui, max_steps=CODER_MAX_STEPS,
-                        context_limit=CODER_CONTEXT_LIMIT)
+                        context_limit=CODER_CONTEXT_LIMIT, sandbox=sandbox)
     emit({"type": "tool", **base_event, "name": "code_agent", "ok": True, "phase": "start"})
     try:
         agent.run(task + SAFETY_RULES)
@@ -214,7 +299,8 @@ def run_code_agent(company, role_id: str, task: str, emit, base_event: dict, can
         if sandbox is not None:
             sandbox.stop()      # 每次编码任务用完就删掉容器
 
-    where = "（命令在 Docker 沙箱里执行）" if sandbox is not None else ("（命令在本机执行）" if allow_run else "")
+    where = ("（命令在 Docker 沙箱里执行）" if sandbox is not None else ("（命令在本机执行）" if allow_run else "")
+             if not refused else f"（{refused}，这次只写代码、没有运行）")
     lines = [f"编码 agent 已结束（调用模型 {agent.steps} 次）{where}。"]
     lines.append("新建或修改的文件：" + ("、".join(ui.files) if ui.files else "无"))
     if ui.commands:
@@ -224,6 +310,8 @@ def run_code_agent(company, role_id: str, task: str, emit, base_event: dict, can
         lines.append(f"最后一条命令的输出：\n{last['output']}")
     elif allow_run:
         lines.append("没有运行任何命令（代码未经实际运行验证）。")
+    elif refused:
+        lines.append("沙箱用不了，代码未经实际运行验证；在汇报里说明，等 Docker 恢复后再运行验证。")
     else:
         lines.append("公司没有允许运行代码，代码未经实际运行验证。")
     if agent.steps >= CODER_MAX_STEPS:

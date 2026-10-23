@@ -21,6 +21,7 @@ class Role:
     can_code: bool = False
     department: str = ""        # 角色库的部门（预设角色为空）
     department_name: str = ""
+    can_test: bool = False      # 能运行测试（run_command，只运行不改代码）：测试角色。会写代码的角色用编码 agent 运行
 
 
 PRESET_ROLES: list[Role] = [
@@ -39,7 +40,7 @@ PRESET_ROLES: list[Role] = [
     Role("qa", "测试", "🧪", "测试计划、用例与风险评审",
          "负责质量：根据 PRD 的验收标准写测试计划和测试用例（含正常流程、边界情况、异常情况），"
          "并评审其他同事的产出（需求是否矛盾、方案是否有漏洞、代码是否有明显 bug），列出风险和改进建议。",
-         "docs/test-plan.md"),
+         "docs/test-plan.md", can_test=True),
     Role("marketing", "市场", "📣", "市场定位、竞品与推广",
          "负责市场：目标市场与用户画像、主要竞品及差异化、产品定位与核心卖点、上线推广方案（渠道、节奏、预算思路）、"
          "以及可以直接使用的宣传文案（标语、介绍、社交媒体帖子）。",
@@ -71,7 +72,8 @@ def _load_library() -> list[Role]:
         tagline = o.get("tagline", r.get("tagline", ""))
         roles.append(Role(r["id"], o.get("name", r["name"]), r.get("icon") or "🧩", tagline, tagline,
                           r.get("default_file") or "docs/notes.md", bool(r.get("can_code")), r["department"],
-                          r.get("department_name") or r["department"]))
+                          r.get("department_name") or r["department"],
+                          can_test=r["department"] == "testing" and not r.get("can_code")))
     return roles
 
 

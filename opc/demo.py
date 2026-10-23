@@ -50,7 +50,8 @@ class DemoLLM:
             return self._reply(json.dumps(data, ensure_ascii=False), "演示模式：理解 CEO 的话。", on_delta=on_delta,
                                stream_text=False)
         if self.role_id is None and "规划助手" in system:
-            roles = re.findall(r"^- ([\w-]+)（", system, re.M)
+            # 只认公司成员：规划提示词里还有"- small（小任务）"这样同样格式的行，成员少于 4 个时会被当成角色
+            roles = [r for r in re.findall(r"^- ([\w-]+)（", system, re.M) if r in ROLES]
             first, rest = roles[0], roles[1:4]
             directive = (re.search(r"CEO 的指令：(.*)", messages[-1]["content"]) or ["", ""])[1].strip()
             if directive.startswith(("搜", "查", "问")) or directive.endswith(("？", "?")):  # 演示：提问类的指令按小任务安排

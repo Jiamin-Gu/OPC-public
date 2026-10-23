@@ -307,8 +307,81 @@ $("createForm").onsubmit = async (e) => {
 
 document.querySelectorAll(".dlg").forEach((d) => {
   d.querySelectorAll("[data-close]").forEach((b) => { b.onclick = () => d.close(); });
-  d.addEventListener("click", (e) => { if (e.target === d) d.close(); });  // 点遮罩关闭
+  d.addEventListener("click", (e) => { if (e.target === d && !d.dataset.sticky) d.close(); });  // 点遮罩关闭（编辑中的不关）
 });
+
+// ---------- 编辑计划（审批时直接改：负责人、审查人、要求、依赖、验收标准、交付文件，增删任务；不调用规划助手）
+
+let planRows = [], planNewSeq = 0;
+
+function openPlanEditor() {
+  planRows = review.task_ids.map((id) => S.tasks[id]).filter(Boolean).map((t) => ({
+    id: t.id, key: t.id, title: t.title, detail: t.detail, assignee: t.assignee, reviewer: t.reviewer || "",
+    depends_on: [...(t.depends_on || [])], acceptance: (t.acceptance || []).join("\n"),
+    deliverables: (t.deliverables || []).map((d) => d.path).join("\n") }));
+  $("planEditErr").textContent = $("planEditNote").textContent = "";
+  renderPlanEditor();
+  $("planDlg").showModal();
+}
+
+function roleOptions(selected, emptyLabel) {
+  return (emptyLabel ? `<option value="">${emptyLabel}</option>` : "") + C.roles.map((r) => {
+    const p = presets[r.id] || {};
+    return `<option value="${esc(r.id)}"${r.id === selected ? " selected" : ""}>${p.icon || ""} ${esc(p.name || r.id)}</option>`;
+  }).join("");
+}
+
+function renderPlanEditor() {
+  const body = $("planEditBody");
+  body.innerHTML = "";
+  planRows.forEach((r, i) => {
+    const earlier = planRows.slice(0, i);  // 只能依赖排在前面的任务，不会出现循环
+    const card = el("div", "pe-task");
+    card.innerHTML = `<div class="pe-head"><b>${i + 1}</b><input class="pe-title" value="${esc(r.title)}" placeholder="任务标题">
+        <button class="icon-btn" data-del title="删除这个任务">🗑</button></div>
+      <div class="pe-row"><label>负责人<select data-f="assignee">${roleOptions(r.assignee)}</select></label>
+        <label>审查人<select data-f="reviewer">${roleOptions(r.reviewer, "不审查")}</select></label></div>
+      <label>具体要求<textarea data-f="detail" rows="3">${esc(r.detail)}</textarea></label>
+      ${earlier.length ? `<div class="pe-deps"><span>等这些任务完成后再开始：</span>${earlier.map((e) =>
+        `<label><input type="checkbox" data-dep="${esc(e.key)}"${r.depends_on.includes(e.key) ? " checked" : ""}>${esc(e.title || "（未命名）")}</label>`).join("")}</div>` : ""}
+      <div class="pe-row"><label>验收标准（一行一条）<textarea data-f="acceptance" rows="3">${esc(r.acceptance)}</textarea></label>
+        <label>交付文件（一行一个路径）<textarea data-f="deliverables" rows="3" placeholder="docs/PRD.md">${esc(r.deliverables)}</textarea></label></div>`;
+    card.querySelector(".pe-title").oninput = (e) => { r.title = e.target.value; };
+    card.querySelectorAll("[data-f]").forEach((x) => { x.oninput = x.onchange = () => { r[x.dataset.f] = x.value; }; });
+    card.querySelectorAll("[data-dep]").forEach((x) => {
+      x.onchange = () => { r.depends_on = x.checked ? [...r.depends_on, x.dataset.dep] : r.depends_on.filter((d) => d !== x.dataset.dep); };
+    });
+    card.querySelector("[data-del]").onclick = () => deletePlanRow(i);
+    body.appendChild(card);
+  });
+}
+
+function deletePlanRow(i) {
+  const [gone] = planRows.splice(i, 1);
+  const affected = planRows.filter((r) => r.depends_on.includes(gone.key));
+  affected.forEach((r) => { r.depends_on = r.depends_on.filter((d) => d !== gone.key); });
+  renderPlanEditor();
+  // 提示写在编辑窗口里（页面的浮动提示会被窗口挡住）
+  $("planEditNote").textContent = affected.length
+    ? `${affected.map((r) => `《${r.title}》`).join("、")}不再等待《${gone.title}》` : "";
+}
+
+function submitPlanEdit(approve) {
+  const lines = (s) => String(s || "").split("\n").map((x) => x.trim()).filter(Boolean);
+  $("planEditErr").textContent = "";
+  send({ type: "plan_edit", approve, tasks: planRows.map((r) => ({
+    id: r.id, key: r.key, title: r.title.trim(), detail: r.detail, assignee: r.assignee, reviewer: r.reviewer,
+    depends_on: r.depends_on, acceptance: lines(r.acceptance), deliverables: lines(r.deliverables) })) });
+}
+
+$("planAddTask").onclick = () => {
+  planRows.push({ id: "", key: `new${++planNewSeq}`, title: "", detail: "", assignee: C.roles[0]?.id || "", reviewer: "",
+                  depends_on: [], acceptance: "", deliverables: "" });
+  renderPlanEditor();
+  $("planEditBody").lastElementChild?.querySelector(".pe-title")?.focus();
+};
+$("planSave").onclick = () => submitPlanEdit(false);
+$("planSaveApprove").onclick = () => submitPlanEdit(true);
 
 // ---------- 角色库
 
@@ -1148,7 +1221,7 @@ function renderPlan(m) {
   const tasks = (m.tasks || []).map((id) => S.tasks[id]).filter(Boolean);
   const recalled = (m.recalled || []).length
     ? `<details class="pt-req plan-recall"><summary>📚 规划时参考了知识库里 ${m.recalled.length} 条相关记录</summary><ul>${m.recalled.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></details>` : "";
-  md.innerHTML = `<div class="plan-title">${m.quick ? "⚡ 小任务 · 直接开始" : "执行计划"}</div>${markdown(m.text)}${recalled}<div class="plan-tasks"></div>`;
+  md.innerHTML = `<div class="plan-title">${m.quick ? "⚡ 小任务 · 直接开始" : m.edited ? "执行计划（CEO 修改过）" : "执行计划"}</div>${markdown(m.text)}${recalled}<div class="plan-tasks"></div>`;
   const list = md.querySelector(".plan-tasks");
   for (const t of tasks) {
     const p = presets[t.assignee] || {};
@@ -1161,7 +1234,9 @@ function renderPlan(m) {
       ${requirementsHtml(t) ? `<details class="pt-req"><summary>交付要求与验收标准</summary>${requirementsHtml(t)}</details>` : ""}</div>`;
     list.appendChild(row);
   }
-  if (isPlanReview() && review.directive_id === m.directive_id && tasks.some((t) => review.task_ids.includes(t.id))) {
+  // 审批按钮只放在最新的那份计划上（CEO 编辑过计划时，新卡片和旧卡片有相同的任务）
+  if (isPlanReview() && review.directive_id === m.directive_id
+      && (review.plan_msg ? review.plan_msg === m.id : tasks.some((t) => review.task_ids.includes(t.id)))) {
     md.appendChild(reviewBox());
   }
   return node;
@@ -1172,6 +1247,7 @@ function reviewBox() {
   const showButtons = () => {
     box.innerHTML = `<div class="rb-title">⏳ 等你审批：批准后各位同事开始执行</div><div class="review-actions">
       <button class="btn ok" data-a="approve">批准执行</button>
+      <button class="btn" data-a="edit">✏️ 编辑计划</button>
       <button class="btn" data-a="revise">提修改意见…</button>
       <button class="btn ghost" data-a="cancel">取消这条指令</button></div>`;
   };
@@ -1186,6 +1262,7 @@ function reviewBox() {
       return;
     }
     if (a === "back") return showButtons();
+    if (a === "edit") return openPlanEditor();
     const feedback = a === "revise!" ? box.querySelector("textarea").value.trim() : "";
     if (a === "revise!" && !feedback) return toast("请写下修改意见");
     send({ type: "review", action: a === "revise!" ? "revise" : a, feedback });
@@ -1232,7 +1309,8 @@ function fillStream(node, s) {
 // ---------- 进度摘要：这一步在做什么、做了多久、为什么还没结束
 
 const ACT_TOOLS = { read_file: "读文件", list_files: "查看文件列表", write_file: "写文件", edit_file: "修改文件",
-  ask_colleague: "问同事", report_upstream_issue: "上报上游问题", submit_review: "提交审查结论", delegate_to_coder: "交给编码 agent" };
+  ask_colleague: "问同事", report_upstream_issue: "上报上游问题", submit_review: "提交审查结论", delegate_to_coder: "交给编码 agent",
+  run_command: "运行命令" };
 const actTool = (name) => ACT_TOOLS[name] || name || "工具";
 const baseName = (p) => String(p || "").split("/").pop();
 const nowSec = () => Date.now() / 1000;
@@ -2012,6 +2090,8 @@ const handlers = {
     if (ev.changed && ev.changed === openFile) viewFile(openFile);
   },
   notice(ev) { toast(ev.text); },
+  plan_edit_error(ev) { $("planEditErr").textContent = ev.error; },  // 编辑窗口不关，改正后再提交
+  plan_edit_ok() { $("planDlg").close(); },
 };
 
 function connect() {
